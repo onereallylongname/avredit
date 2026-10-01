@@ -1,10 +1,10 @@
-# AVEDIT Modular Architecture Design
+# AVREDIT Modular Architecture Design
 
 _**Note**: This is a suggestion of implementation of an approach to a modular TUI application. This can and should be challenged to be improved. The module architecture is important to do right_
 
 ## 1. Purpose
 
-This document defines a modular architecture for **avedit**, enabling optional features such as:
+This document defines a modular architecture for **avredit**, enabling optional features such as:
 
 - Mouse support
 - Schema Registry integration
@@ -20,7 +20,7 @@ Goals:
 
 ## 2. Architectural Overview
 
-Avedit will follow a:
+Avredit will follow a:
 
 > Core Engine + Optional Modules
 

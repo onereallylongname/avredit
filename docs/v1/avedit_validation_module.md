@@ -1,8 +1,8 @@
-# AVEDIT Validation & Compatibility Module Design
+# AVREDIT Validation & Compatibility Module Design
 
 ## 1. Purpose
 
-Define a validation and compatibility module for avedit enabling:
+Define a validation and compatibility module for avredit enabling:
 
 - Schema validation
 - Version compatibility checks
@@ -192,7 +192,7 @@ Useful for decoding-based validation workflows.
 
 ### Phase 4 – UX Integration
 
-- CLI: avedit validate / diff
+- CLI: avredit validate / diff
 - TUI: live compatibility feedback
 
 ---

@@ -1,7 +1,4 @@
 {
-  "type": "record",
-  "name": "AllTypesRoot",
-  "namespace": "com.example.avro.alltypes.v1",
   "doc": "Schema covering all Avro primitive and complex types, including nested unions and logical types",
   "fields": [
     {
@@ -21,6 +18,7 @@
       "type": "long"
     },
     {
+      "doc": "ddddddddddddddddddddddddddddddddddddddddddddddddvdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd      ddddddddddddddddddddddddddddddddddddddddddddddddk",
       "name": "p_float",
       "type": "float"
     },
@@ -37,70 +35,66 @@
       "type": "string"
     },
     {
+      "doc": "test tes tsd dfs df \nsdfsdf sdf d\n\ndfsdfdaf ",
       "name": "decimal_amount",
       "type": {
-        "type": "bytes",
-        "logicalType": "decimal",
-        "precision": 18,
-        "scale": 4
+        "logicalType": "big-decimal",
+        "type": "bytes"
       }
     },
     {
       "name": "event_date",
       "type": {
-        "type": "int",
-        "logicalType": "date"
+        "logicalType": "date",
+        "type": "int"
       }
     },
     {
       "name": "event_time",
       "type": {
-        "type": "int",
-        "logicalType": "time-millis"
+        "logicalType": "time-millis",
+        "type": "int"
       }
     },
     {
       "name": "event_timestamp",
       "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
+        "logicalType": "timestamp-millis",
+        "type": "long"
       }
     },
     {
       "name": "status",
       "type": {
-        "type": "enum",
         "name": "StatusEnum",
         "symbols": [
           "NEW",
           "PROCESSING",
           "COMPLETED",
           "FAILED"
-        ]
+        ],
+        "type": "enum"
       }
     },
     {
       "name": "fixed_hash",
       "type": {
-        "type": "fixed",
         "name": "Sha256Hash",
-        "size": 32
+        "size": 32,
+        "type": "fixed"
       }
     },
     {
       "name": "string_array",
       "type": {
-        "type": "array",
-        "items": "string"
+        "items": "string",
+        "type": "array"
       }
     },
     {
       "name": "record_array",
       "type": {
-        "type": "array",
         "items": {
-          "type": "record",
-          "name": "ArrayItemRecord",
           "fields": [
             {
               "name": "id",
@@ -109,12 +103,15 @@
             {
               "name": "created_at",
               "type": {
-                "type": "long",
-                "logicalType": "timestamp-millis"
+                "logicalType": "timestamp-millis",
+                "type": "long"
               }
             }
-          ]
-        }
+          ],
+          "name": "ArrayItemRecord",
+          "type": "record"
+        },
+        "type": "array"
       }
     },
     {
@@ -129,8 +126,6 @@
       "type": {
         "type": "map",
         "values": {
-          "type": "record",
-          "name": "MapValueRecord",
           "fields": [
             {
               "name": "flag",
@@ -139,84 +134,89 @@
             {
               "name": "amount",
               "type": {
-                "type": "bytes",
                 "logicalType": "decimal",
                 "precision": 10,
-                "scale": 2
+                "scale": 2,
+                "type": "bytes"
               }
             }
-          ]
+          ],
+          "name": "MapValueRecord",
+          "type": "record"
         }
       }
     },
     {
+      "default": null,
       "name": "optional_string",
       "type": [
         "null",
         "string"
-      ],
-      "default": null
+      ]
     },
     {
+      "default": null,
       "name": "nested_union",
       "type": [
         "null",
         {
-          "type": "record",
-          "name": "NestedUnionRecord",
           "fields": [
             {
               "name": "union_enum",
               "type": {
-                "type": "enum",
                 "name": "InnerEnum",
                 "symbols": [
                   "A",
                   "B",
                   "C"
-                ]
+                ],
+                "type": "enum"
               }
             },
             {
               "name": "union_value",
               "type": [
                 {
-                  "type": "record",
-                  "name": "DeepNestedRecord",
                   "fields": [
                     {
                       "name": "deep_date",
                       "type": {
-                        "type": "int",
-                        "logicalType": "date"
+                        "logicalType": "date",
+                        "type": "int"
                       }
                     },
                     {
                       "name": "deep_array",
                       "type": {
-                        "type": "array",
                         "items": {
                           "type": "map",
                           "values": "string"
-                        }
+                        },
+                        "type": "array"
                       }
                     }
-                  ]
+                  ],
+                  "name": "DeepNestedRecord",
+                  "type": "record"
                 },
                 {
-                  "type": "bytes",
                   "logicalType": "decimal",
                   "precision": 12,
-                  "scale": 3
+                  "scale": 3,
+                  "type": "bytes"
                 }
               ]
             }
-          ]
+          ],
+          "name": "NestedUnionRecord",
+          "type": "record"
         }
-      ],
-      "default": null
+      ]
     }
   ],
+  "name": "AllTypesRoot",
+  "namespace": "com.example.avro.alltypes.v1",
+  "type": "record",
   "x-tags": [
     "all-types",
     "editor-test",

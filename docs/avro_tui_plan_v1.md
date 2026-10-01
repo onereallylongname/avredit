@@ -1,8 +1,8 @@
-# avedit — Avro Editor TUI (Checkpoint v2)
+# avredit — Avro Editor TUI (Checkpoint v2)
 
 ## 🎯 Goal
 
-Port the existing Avro schema web editor into a lazygit-inspired Terminal UI (TUI) called `avedit` with strong usability, fast performance, and cross-platform distribution.
+Port the existing Avro schema web editor into a lazygit-inspired Terminal UI (TUI) called `avredit` with strong usability, fast performance, and cross-platform distribution.
 
 Source editor: https://onereallylongname.github.io/tools/avro/avro-editor.html
 lazygit: https://github.com/jesseduffield/lazygit
@@ -20,8 +20,8 @@ lazygit: https://github.com/jesseduffield/lazygit
 | Layout       | 4 panels (tree, details, file explorer stub, status bar) |
 | Modes        | Normal, Edit, Search, Command                            |
 | Theming      | TOML config with runtime switching                       |
-| Binary name  | `avedit`                                                 |
-| Module path  | `github.com/onereallylongname/avedit`                    |
+| Binary name  | `avredit`                                                 |
+| Module path  | `github.com/onereallylongname/avredit`                    |
 | File I/O     | CLI arg + TUI file picker                                |
 
 ---
@@ -166,6 +166,8 @@ The system is built around an **internal projection model (source of truth)**:
 | `t:`  | Filter by type                 |
 | `p:`  | Filter by parent               |
 | `ns:` | Filter by namespace            |
+| `a:`  | Filter by alias                |
+| `d:`  | Filter by doc text             |
 
 ### Command Mode
 
@@ -187,7 +189,7 @@ The system is built around an **internal projection model (source of truth)**:
 ### Package Structure
 
 ```
-cmd/avedit/main.go          Entry point, CLI arg parsing
+cmd/avredit/main.go          Entry point, CLI arg parsing
 internal/
   model/                    Bubbletea models (TUI layer)
     app.go                  Root model, panel routing, mode dispatch
@@ -274,7 +276,7 @@ internal/
 - Ship 3 built-in themes: dark (default), light, nord
 - Theme defines: background, foreground, accent, node-kind colors, mode indicator colors
 - Lipgloss styles derived from theme at load time
-- Config file: `~/.config/avedit/config.toml`
+- Config file: `~/.config/avredit/config.toml`
 
 ---
 
@@ -333,7 +335,7 @@ internal/
 ### Phase 4: Search + Command Mode ✅
 
 - Search input with fuzzy matching
-- Prefix filters (n:, t:, p:, ns:, a:)
+- Prefix filters (n:, t:, p:, ns:, a:, d:) and free-text matching over doc fields
 - Command mode (:w, :q, :export, :theme)
 - File picker for opening new schemas
 
@@ -342,7 +344,7 @@ internal/
 - JSON theme files (migrated from TOML)
 - 10 built-in themes (dark, light, monokai, catppuccin-mocha, tokyo-night, rose-pine, dracula, gruvbox, one-dark-pro, vscode-light)
 - Runtime switching via `:theme` command
-- Config at `~/.config/avedit/config.json`
+- Config at `~/.config/avredit/config.json`
 - Theme persistence (saved on switch)
 
 ### Phase 6: Polish ✅
@@ -363,7 +365,7 @@ internal/
 
 - Command history (↑/↓ arrows in command mode)
 - Search history (↑/↓ arrows in search mode)
-- Persistent history saved to `~/.config/avedit/history.json`
+- Persistent history saved to `~/.config/avredit/history.json`
 - Unsaved changes confirmation on quit and load
 - Named type rename propagation
 - Alias rename propagation
@@ -446,7 +448,7 @@ internal/
 
 ## ✅ Final Direction
 
-A terminal-based Avro editor (`avedit`) focused on:
+A terminal-based Avro editor (`avredit`) focused on:
 
 - Strong internal projection model (pure, testable)
 - High productivity UX (vim bindings, modes, fast navigation)

@@ -1,8 +1,8 @@
-# AVEDIT – Competitive TUI Validation & UX Baseline Document
+# AVREDIT – Competitive TUI Validation & UX Baseline Document
 
 ## 1. Purpose
 
-This document defines the **minimum UX and validation expectations** required for avedit to be competitive with industry-standard editors (VSCode, IntelliJ), focusing specifically on:
+This document defines the **minimum UX and validation expectations** required for avredit to be competitive with industry-standard editors (VSCode, IntelliJ), focusing specifically on:
 
 - Schema validation UX
 - Visual feedback (TUI equivalents of IDE affordances)
@@ -13,9 +13,9 @@ This document defines the **minimum UX and validation expectations** required fo
 
 ## 2. Core Principle
 
-Avedit must not compete as a general editor.
+Avredit must not compete as a general editor.
 
-> Avedit = Schema intelligence tool with editing capabilities
+> Avredit = Schema intelligence tool with editing capabilities
 
 ---
 
@@ -56,7 +56,7 @@ Example:
 
 ### 3.2 Editing Guarantees
 
-Avedit must ensure:
+Avredit must ensure:
 
 - No invalid schema is silently produced
 - Invalid states are visible immediately
@@ -205,7 +205,7 @@ Based on context:
 
 ## 10. Summary
 
-To be competitive, avedit must:
+To be competitive, avredit must:
 
 - Match baseline feedback expectations (visibility of errors and status)
 - Expose schema intelligence clearly and immediately

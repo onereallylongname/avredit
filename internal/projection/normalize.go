@@ -3,7 +3,7 @@ package projection
 import (
 	"fmt"
 
-	"github.com/onereallylongname/avedit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/schema"
 )
 
 // Normalized holds the result of normalizing a raw Avro type value.

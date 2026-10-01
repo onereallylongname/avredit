@@ -1,8 +1,8 @@
-# avedit — Avro Editor TUI (Checkpoint v2)
+# avredit — Avro Editor TUI (Checkpoint v2)
 
 ## 🎯 Goal
 
-Port the existing Avro schema web editor into a lazygit-inspired Terminal UI (TUI) called `avedit` with strong usability, fast performance, and cross-platform distribution.
+Port the existing Avro schema web editor into a lazygit-inspired Terminal UI (TUI) called `avredit` with strong usability, fast performance, and cross-platform distribution.
 
 Source editor: <https://onereallylongname.github.io/tools/avro/avro-editor.html>
 lazygit: <https://github.com/jesseduffield/lazygit>
@@ -20,8 +20,8 @@ lazygit: <https://github.com/jesseduffield/lazygit>
 | Layout       | 4 panels (tree, details, file explorer, status bar)  |
 | Modes        | Normal, Edit, Search, Command                        |
 | Theming      | Config with runtime switching                        |
-| Binary name  | `avedit`                                             |
-| Module path  | `github.com/onereallylongname/avedit`                |
+| Binary name  | `avredit`                                             |
+| Module path  | `github.com/onereallylongname/avredit`                |
 | File I/O     | CLI arg + TUI file picker                            |
 
 ---
@@ -84,7 +84,7 @@ The system is built around an **internal projection model (source of truth)**:
 
 ## Direction
 
-A terminal-based Avro editor (`avedit`) focused on:
+A terminal-based Avro editor (`avredit`) focused on:
 
 - Strong internal projection model (pure, testable)
 - High productivity UX (vim bindings, modes, fast navigation)
@@ -103,7 +103,7 @@ These should implemented first as they are foundational.
 
 _Docs_:
 
-- avedit_modular_architecture.md
+- avredit_modular_architecture.md
 - go_cli_parser_comparison.md
 
 [ ] **Better cli arguments**
@@ -139,8 +139,8 @@ These are a TODO list and in no particular order.
 
 _Docs_:
 
-- avedit_validation_module.md
-- avedit_tui_validation_baseline.md
+- avredit_validation_module.md
+- avredit_tui_validation_baseline.md
 
 [ ] **Schema Registry Integration (~1500-2000 LoC, 16-24h)**
 

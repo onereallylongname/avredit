@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/onereallylongname/avedit/internal/theme"
+	"github.com/onereallylongname/avredit/internal/theme"
 )
 
 // StatusBarModel renders the bottom status bar.

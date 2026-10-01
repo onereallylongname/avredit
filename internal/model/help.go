@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/onereallylongname/avedit/internal/theme"
+	"github.com/onereallylongname/avredit/internal/theme"
 )
 
 // KeyBinding describes a single key binding.
@@ -30,19 +30,10 @@ func Keybindings() []KeySection {
 				{"tab", "Cycle panel focus"},
 				{"1/2/3", "Focus explorer/tree/details"},
 				{"ctrl+e", "Toggle file explorer"},
+				{"ctrl+g", "Switch explorer to/from Schema Registry"},
 				{"esc", "Cancel / clear highlights"},
 				{"u", "Undo"},
 				{"ctrl+r", "Redo"},
-			},
-		},
-		{
-			Title: "Explorer",
-			Bindings: []KeyBinding{
-				{"j/k", "Navigate up/down"},
-				{"h/l", "Collapse/expand directory"},
-				{"enter", "Open .avsc file / expand dir"},
-				{"-/bksp", "Go to parent directory"},
-				{"g/G", "Jump to top/bottom"},
 			},
 		},
 		{
@@ -88,7 +79,8 @@ func Keybindings() []KeySection {
 			Bindings: []KeyBinding{
 				{"enter", "Confirm edit"},
 				{"esc", "Cancel edit"},
-				{"shift+enter", "Newline (multiline fields)"},
+				{"shift+enter", "Newline (multiline fields; needs terminal support)"},
+				{"ctrl+j / alt+enter", "Newline (multiline fields; universal fallback)"},
 			},
 		},
 		{
@@ -98,6 +90,12 @@ func Keybindings() []KeySection {
 				{"enter", "Jump to match"},
 				{"n/N", "Next/prev match"},
 				{"esc", "Close search"},
+				{"n:foo", "Filter by name"},
+				{"t:foo", "Filter by type"},
+				{"p:foo", "Filter by parent"},
+				{"ns:foo", "Filter by namespace"},
+				{"a:foo", "Filter by alias"},
+				{"d:foo", "Filter by doc text"},
 			},
 		},
 		{
@@ -111,8 +109,19 @@ func Keybindings() []KeySection {
 				{":wq", "Save and quit"},
 				{":export [file]", "Export .avsc"},
 				{":theme <name>", "Switch theme"},
-					{":notifications", "Show notification log"},
-					{"tab", "Autocomplete command"},
+				{":notifications", "Show notification log"},
+				{"tab", "Autocomplete command"},
+			},
+		},
+		{
+			Title: "Schema Registry (Confluent Cloud / Confluent-compatible)",
+			Bindings: []KeyBinding{
+				{"ctrl+g", "Switch explorer between Files and Registry"},
+				{"j/k/enter/space", "Navigate subjects/versions, fetch a version"},
+				{"/", "Search fetched subjects"},
+				{":registry check [subject]", "Compatibility check vs latest registered version (opens a report if incompatible)"},
+				{":registry report", "Reopen the last compatibility check report"},
+				{"s (in report)", "Save the report to disk (timestamped file)"},
 			},
 		},
 	}

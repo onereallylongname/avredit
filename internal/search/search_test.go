@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/onereallylongname/avedit/internal/projection"
-	"github.com/onereallylongname/avedit/internal/search"
+	"github.com/onereallylongname/avredit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/search"
 )
 
 func mustBuild(t *testing.T, jsonStr string) *projection.Projection {
@@ -29,7 +29,8 @@ const searchTestSchema = `{
 		{"name": "eventId", "type": "string"},
 		{"name": "userId", "type": ["null", "string"]},
 		{"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
-		{"name": "metadata", "type": {"type": "map", "values": "string"}}
+		{"name": "metadata", "type": {"type": "map", "values": "string"}},
+		{"name": "region", "type": "string", "doc": "The AWS region where the event was captured, e.g. us-east-1."}
 	]
 }`
 
@@ -40,10 +41,10 @@ func TestFuzzy_Subsequence(t *testing.T) {
 		str, pattern string
 		want         bool
 	}{
-		{"UserEvent", "UE", true},    // CamelCase
-		{"eventId", "eid", true},     // subsequence
-		{"userId", "xyz", false},     // no match
-		{"timestamp", "time", true},  // prefix-ish
+		{"UserEvent", "UE", true},   // CamelCase
+		{"eventId", "eid", true},    // subsequence
+		{"userId", "xyz", false},    // no match
+		{"timestamp", "time", true}, // prefix-ish
 		{"", "x", false},            // empty string
 		{"abc", "", false},          // empty pattern
 	}
@@ -109,6 +110,26 @@ func TestTypeComponentScore(t *testing.T) {
 	}
 }
 
+func TestDocScore(t *testing.T) {
+	doc := "The AWS region where the event was captured, e.g. us-east-1."
+
+	if score := search.DocScore(doc, "region"); score <= 0 {
+		t.Errorf("whole-word substring match score = %f, want > 0", score)
+	}
+	if score := search.DocScore(doc, "regio"); score <= 0 {
+		t.Errorf("partial substring match score = %f, want > 0", score)
+	}
+	if score := search.DocScore(doc, "nonexistent"); score != 0 {
+		t.Errorf("no match score = %f, want 0", score)
+	}
+	if score := search.DocScore("", "region"); score != 0 {
+		t.Errorf("empty doc score = %f, want 0", score)
+	}
+	if score := search.DocScore(doc, ""); score != 0 {
+		t.Errorf("empty needle score = %f, want 0", score)
+	}
+}
+
 // --- ParseQuery Tests ---
 
 func TestParseQuery(t *testing.T) {
@@ -120,6 +141,8 @@ func TestParseQuery(t *testing.T) {
 		{"t:string", search.Filters{Type: "string"}},
 		{"p:UserEvent", search.Filters{Parent: "UserEvent"}},
 		{"ns:com.analytics", search.Filters{Namespace: "com.analytics"}},
+		{"a:Alias1", search.Filters{Alias: "Alias1"}},
+		{"d:deprecated", search.Filters{Doc: "deprecated"}},
 		{"userId", search.Filters{Text: "userId"}},
 		{"", search.Filters{}},
 	}
@@ -163,6 +186,44 @@ func TestQueryNodes_FreeText(t *testing.T) {
 
 	if len(results) == 0 {
 		t.Fatal("expected results for free text 'user'")
+	}
+}
+
+func TestQueryNodes_ByDoc(t *testing.T) {
+	proj := mustBuild(t, searchTestSchema)
+	results := search.QueryNodes(proj, search.Filters{Doc: "aws region"})
+
+	if len(results) == 0 {
+		t.Fatal("expected results for doc search 'aws region'")
+	}
+	found := false
+	for _, r := range results {
+		if r.Node.Name() == "region" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'region' field to match doc search, got %+v", results)
+	}
+}
+
+func TestQueryNodes_FreeTextMatchesDoc(t *testing.T) {
+	proj := mustBuild(t, searchTestSchema)
+	// "us-east-1" only appears in the doc text, not in any name/type/alias.
+	results := search.QueryNodes(proj, search.Filters{Text: "us-east-1"})
+
+	if len(results) == 0 {
+		t.Fatal("expected free-text search to find matches inside doc field content")
+	}
+	found := false
+	for _, r := range results {
+		if r.Node.Name() == "region" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'region' field to be found via doc-text free search, got %+v", results)
 	}
 }
 

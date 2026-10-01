@@ -1,11 +1,11 @@
-﻿package model
+package model
 
 import (
 "os"
 "path/filepath"
 "testing"
 
-"github.com/onereallylongname/avedit/internal/theme"
+"github.com/onereallylongname/avredit/internal/theme"
 )
 
 func TestExplorer_FilterExpandsNestedMatches(t *testing.T) {

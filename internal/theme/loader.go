@@ -203,7 +203,7 @@ func DiscoverThemes(dir string) ([]string, error) {
 }
 
 // ThemesDir returns the default themes directory path.
-// Checks: CWD/themes → next to executable → ~/.config/avedit/themes.
+// Checks: CWD/themes → next to executable → ~/.config/avredit/themes.
 func ThemesDir() string {
 	// Check current working directory
 	if info, err := os.Stat("themes"); err == nil && info.IsDir() {
@@ -222,7 +222,7 @@ func ThemesDir() string {
 	if err != nil {
 		return "themes"
 	}
-	return filepath.Join(home, ".config", "avedit", "themes")
+	return filepath.Join(home, ".config", "avredit", "themes")
 }
 
 // Registry holds available themes by name.
@@ -296,13 +296,13 @@ func (r *Registry) loadFromPath(dir string) {
 	}
 }
 
-// userThemesDir returns ~/.config/avedit/themes if it exists.
+// userThemesDir returns ~/.config/avredit/themes if it exists.
 func userThemesDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	dir := filepath.Join(home, ".config", "avedit", "themes")
+	dir := filepath.Join(home, ".config", "avredit", "themes")
 	if info, err := os.Stat(dir); err == nil && info.IsDir() {
 		return dir
 	}

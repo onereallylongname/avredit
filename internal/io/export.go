@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/onereallylongname/avedit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/projection"
 )
 
 // ExportAvroToFile serializes the projection to a pretty-printed .avsc file.

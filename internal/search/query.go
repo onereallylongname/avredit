@@ -1,6 +1,6 @@
 // Package search implements the query engine for finding nodes in a projection.
 //
-// Supports prefix filters (n:name, t:type, p:parent, ns:namespace, a:alias)
+// Supports prefix filters (n:name, t:type, p:parent, ns:namespace, a:alias, d:doc)
 // and free-text fuzzy matching. All active filters use AND logic.
 // Results are scored by weighted relevance and sorted descending.
 //
@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/onereallylongname/avedit/internal/projection"
-	"github.com/onereallylongname/avedit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/schema"
 )
 
 // Filters defines the search criteria for querying nodes.
@@ -22,12 +22,13 @@ type Filters struct {
 	Parent    string // p: prefix
 	Namespace string // ns: prefix
 	Alias     string // a: prefix
+	Doc       string // d: prefix
 	Text      string // free-text (no prefix)
 }
 
 // IsEmpty returns true if no filter is active.
 func (f Filters) IsEmpty() bool {
-	return f.Name == "" && f.Type == "" && f.Parent == "" && f.Namespace == "" && f.Alias == "" && f.Text == ""
+	return f.Name == "" && f.Type == "" && f.Parent == "" && f.Namespace == "" && f.Alias == "" && f.Doc == "" && f.Text == ""
 }
 
 // Result represents a single search match.
@@ -93,7 +94,7 @@ func QueryNodes(proj *projection.Projection, filters Filters) []Result {
 }
 
 // ParseQuery parses a search string into structured filters.
-// Supports prefixes: "n:", "t:", "p:", "ns:", "a:"
+// Supports prefixes: "n:", "t:", "p:", "ns:", "a:", "d:"
 func ParseQuery(input string) Filters {
 	input = strings.TrimSpace(input)
 	if input == "" {
@@ -111,6 +112,8 @@ func ParseQuery(input string) Filters {
 		return Filters{Namespace: strings.TrimSpace(input[3:])}
 	case strings.HasPrefix(input, "a:"):
 		return Filters{Alias: strings.TrimSpace(input[2:])}
+	case strings.HasPrefix(input, "d:"):
+		return Filters{Doc: strings.TrimSpace(input[2:])}
 	default:
 		return Filters{Text: input}
 	}
@@ -138,6 +141,9 @@ func gatherActiveFilters(f Filters) []activeFilter {
 	if f.Alias != "" {
 		result = append(result, activeFilter{"alias", f.Alias})
 	}
+	if f.Doc != "" {
+		result = append(result, activeFilter{"doc", f.Doc})
+	}
 	if f.Text != "" {
 		result = append(result, activeFilter{"text", f.Text})
 	}
@@ -160,6 +166,9 @@ func scoreNode(proj *projection.Projection, node *projection.Node, _ Filters, ac
 			)
 			if aliasScore := FuzzyScore(props.aliases, af.value) * 2.5; aliasScore > best {
 				best = aliasScore
+			}
+			if docScore := DocScore(props.doc, af.value) * 1.5; docScore > best {
+				best = docScore
 			}
 			if best > 0 {
 				total += best
@@ -195,6 +204,12 @@ func scoreNode(proj *projection.Projection, node *projection.Node, _ Filters, ac
 				total += score * 3
 				matched++
 			}
+		case "doc":
+			score := DocScore(props.doc, af.value)
+			if score > 0 {
+				total += score * 2
+				matched++
+			}
 		}
 	}
 
@@ -211,6 +226,7 @@ type searchProps struct {
 	parent    string
 	namespace string
 	aliases   string
+	doc       string
 }
 
 func getSearchableProps(proj *projection.Projection, node *projection.Node) searchProps {
@@ -220,6 +236,7 @@ func getSearchableProps(proj *projection.Projection, node *projection.Node) sear
 	props.namespace = node.Namespace()
 	props.typeName = getNodeTypeLabel(proj, node)
 	props.parent = getParentRecordName(proj, node)
+	props.doc = node.Doc()
 	if al := node.Aliases(); len(al) > 0 {
 		props.aliases = strings.Join(al, " ")
 	}

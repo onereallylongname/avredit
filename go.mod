@@ -1,4 +1,4 @@
-module github.com/onereallylongname/avedit
+module github.com/onereallylongname/avredit
 
 go 1.25.0
 

@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/onereallylongname/avedit/internal/projection"
-	"github.com/onereallylongname/avedit/internal/schema"
-	"github.com/onereallylongname/avedit/internal/theme"
+	"github.com/onereallylongname/avredit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/theme"
 )
 
 // AttrKind describes the editing behavior of an attribute row.
@@ -26,10 +26,10 @@ const (
 
 // EditableAttr represents a single row in the details panel.
 type EditableAttr struct {
-	Key       string   // display label
-	Value     string   // current value
-	Scope     string   // "native"
-	NativeKey string   // key in the native map
+	Key       string // display label
+	Value     string // current value
+	Scope     string // "native"
+	NativeKey string // key in the native map
 	Kind      AttrKind
 	Options   []string // for AttrSelect
 	ListKey   string   // for AttrListItem/AttrListAdd: parent list key
@@ -53,7 +53,7 @@ type DetailsModel struct {
 	attrs          []EditableAttr
 	cursor         int
 	editing        bool
-	editingKey     bool   // true when editing a custom attr key (rename)
+	editingKey     bool // true when editing a custom attr key (rename)
 	editor         Editor
 	oldValue       string
 	customStartIdx int // index where custom attrs begin in attrs slice
@@ -227,30 +227,65 @@ func (d *DetailsModel) rebuildAttrs() {
 	d.attrs = append(d.attrs, d.collectCustomAttributes()...)
 }
 
+// wrapWidth returns the usable content width for wrapping text, matching the
+// inner width the bordered panel actually renders (panel width minus the two
+// border columns), so wrapped lines never get silently truncated/ellipsized.
+func (d DetailsModel) wrapWidth() int {
+	w := d.width - 2
+	if w < 1 {
+		w = 1
+	}
+	return w
+}
+
 // View renders the details panel content (without border).
 func (d DetailsModel) View() string {
 	if d.node == nil {
 		return "  No node selected"
 	}
 
-	var sb strings.Builder
+	var lines []string
+	addLine := func(s string) { lines = append(lines, s) }
+
+	wrapW := d.wrapWidth()
 
 	// Kind badge
 	kindLabel := fmt.Sprintf(" %s ", strings.ToUpper(string(d.node.Kind)))
-	sb.WriteString(lipgloss.NewStyle().Foreground(d.theme.Dim).Italic(true).Render(kindLabel))
-	sb.WriteString("\n\n")
+	addLine(lipgloss.NewStyle().Foreground(d.theme.Dim).Italic(true).Render(kindLabel))
+	addLine("")
 
 	ks := d.theme.DetailKey
 	vs := d.theme.DetailValue
 	es := lipgloss.NewStyle().Foreground(d.theme.Muted).Italic(true)
 	cs := lipgloss.NewStyle().Foreground(d.theme.Primary).Bold(true)
 
+	// focusLine tracks the rendered row that should stay visible: either the
+	// row under the navigation cursor, or (while editing) the row containing
+	// the text-edit cursor itself.
+	focusLine := -1
+
+	// renderIndentedBlock appends the wrapped rows of `wrapped`, prefixing the
+	// first row with `prefix` and aligning continuation rows beneath it. It
+	// returns the absolute line index of the row containing the edit cursor.
+	renderIndentedBlock := func(prefix string, wrapped []string, cursorRow int) int {
+		indent := strings.Repeat(" ", lipgloss.Width(prefix))
+		startIdx := len(lines)
+		for i, wl := range wrapped {
+			if i == 0 {
+				addLine(prefix + wl)
+			} else {
+				addLine(indent + wl)
+			}
+		}
+		return startIdx + cursorRow
+	}
+
 	for i, attr := range d.attrs {
 		// Custom section header
 		if i == d.customStartIdx && d.customStartIdx < len(d.attrs) {
-			sb.WriteString("\n")
-			sb.WriteString(d.theme.DetailTitle.Render(" Custom Attributes "))
-			sb.WriteString("\n\n")
+			addLine("")
+			addLine(d.theme.DetailTitle.Render(" Custom Attributes "))
+			addLine("")
 		}
 
 		cur := i == d.cursor
@@ -259,22 +294,25 @@ func (d DetailsModel) View() string {
 		if cur {
 			pfx = cs.Render(d.theme.Sym.Cursor) + " "
 		}
+		if cur && focusLine < 0 {
+			focusLine = len(lines)
+		}
 
 		switch attr.Kind {
 		case AttrReadonly:
 			label := ks.Render(pfx + attr.Key + ":")
 			if attr.Value == "" {
-				sb.WriteString(label + "\n")
+				addLine(label)
 			} else {
-				sb.WriteString(label + " " + vs.Render(attr.Value) + "\n")
+				addLine(label + " " + vs.Render(attr.Value))
 			}
 
 		case AttrSelect:
 			label := ks.Render(pfx + attr.Key + ":")
 			if attr.Value == "" {
-				sb.WriteString(label + " " + es.Render("— "+d.theme.Sym.DetailExpand) + "\n")
+				addLine(label + " " + es.Render("— "+d.theme.Sym.DetailExpand))
 			} else {
-				sb.WriteString(label + " " + vs.Render(attr.Value+" "+d.theme.Sym.DetailExpand) + "\n")
+				addLine(label + " " + vs.Render(attr.Value+" "+d.theme.Sym.DetailExpand))
 			}
 
 		case AttrListItem:
@@ -283,9 +321,10 @@ func (d DetailsModel) View() string {
 				indent = "  " + cs.Render(d.theme.Sym.Cursor) + " "
 			}
 			if editing {
-				sb.WriteString(indent + d.editor.View() + "\n")
+				wrapped, cursorRow := d.editor.RenderWrapped(wrapW - lipgloss.Width(indent))
+				focusLine = renderIndentedBlock(indent, wrapped, cursorRow)
 			} else {
-				sb.WriteString(indent + vs.Render("• "+attr.Value) + "\n")
+				addLine(indent + vs.Render("• "+attr.Value))
 			}
 
 		case AttrListAdd:
@@ -294,30 +333,97 @@ func (d DetailsModel) View() string {
 				indent = "  " + cs.Render(d.theme.Sym.Cursor) + " "
 			}
 			if editing {
-				sb.WriteString(indent + d.editor.View() + "\n")
+				wrapped, cursorRow := d.editor.RenderWrapped(wrapW - lipgloss.Width(indent))
+				focusLine = renderIndentedBlock(indent, wrapped, cursorRow)
 			} else {
-				sb.WriteString(indent + es.Render("+ add "+attr.ListKey) + "\n")
+				addLine(indent + es.Render("+ add "+attr.ListKey))
 			}
 
 		default: // AttrText, AttrMultiline
 			label := ks.Render(pfx + attr.Key + ":")
 			if editing && d.editingKey {
-				sb.WriteString(pfx + d.editor.View() + ": " + vs.Render(attr.Value) + "\n")
+				// Key rename is always short; keep single-line rendering.
+				addLine(pfx + d.editor.View() + ": " + vs.Render(attr.Value))
+				focusLine = len(lines) - 1
 			} else if editing {
-				sb.WriteString(label + " " + d.editor.View() + "\n")
+				prefix := label + " "
+				wrapped, cursorRow := d.editor.RenderWrapped(wrapW - lipgloss.Width(prefix))
+				focusLine = renderIndentedBlock(prefix, wrapped, cursorRow)
 			} else if attr.Value == "" {
-				sb.WriteString(label + " " + es.Render("—") + "\n")
+				addLine(label + " " + es.Render("—"))
 			} else {
-				display := attr.Value
-				if attr.Kind == AttrMultiline && strings.Contains(display, "\n") {
-					display = strings.ReplaceAll(display, "\n", "↵ ")
+				prefix := label + " "
+				wrapped := wrapPlainText(attr.Value, wrapW-lipgloss.Width(prefix))
+				indent := strings.Repeat(" ", lipgloss.Width(prefix))
+				for wi, wl := range wrapped {
+					if wi == 0 {
+						addLine(prefix + vs.Render(wl))
+					} else {
+						addLine(indent + vs.Render(wl))
+					}
 				}
-				sb.WriteString(label + " " + vs.Render(display) + "\n")
 			}
 		}
 	}
 
-	return sb.String()
+	return strings.Join(clipToCursor(lines, focusLine, d.height), "\n")
+}
+
+// wrapPlainText word-wraps s to fit within width, treating existing newlines
+// as hard breaks (used to render static, non-editing text such as the Doc
+// field without truncating or overflowing the panel).
+func wrapPlainText(s string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	runes := []rune(s)
+	start := 0
+	var out []string
+	emit := func(seg []rune) {
+		for _, sp := range wrapRunes(seg, width) {
+			out = append(out, string(seg[sp[0]:sp[1]]))
+		}
+	}
+	for i, r := range runes {
+		if r == '\n' {
+			emit(runes[start:i])
+			start = i + 1
+		}
+	}
+	emit(runes[start:])
+	if len(out) == 0 {
+		out = []string{""}
+	}
+	return out
+}
+
+// clipToCursor returns the window of lines that fits within the panel's
+// available height, adjusted so that focusLine (if set) stays visible. If the
+// content already fits, or height is unknown, all lines are returned
+// unchanged so callers without a fixed size behave exactly as before.
+func clipToCursor(lines []string, focusLine, panelHeight int) []string {
+	innerH := panelHeight - 2 // border top/bottom
+	if innerH <= 0 || len(lines) <= innerH {
+		return lines
+	}
+	offset := 0
+	if focusLine >= 0 {
+		if focusLine >= innerH {
+			offset = focusLine - innerH + 1
+		}
+		maxOffset := len(lines) - innerH
+		if offset > maxOffset {
+			offset = maxOffset
+		}
+		if offset < 0 {
+			offset = 0
+		}
+	}
+	end := offset + innerH
+	if end > len(lines) {
+		end = len(lines)
+	}
+	return lines[offset:end]
 }
 
 // collectStandardAttributes builds the standard attribute rows for the node kind.

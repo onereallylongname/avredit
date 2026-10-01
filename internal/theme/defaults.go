@@ -9,7 +9,7 @@ func Dark() *Theme {
 	fg := lipgloss.Color("#c0caf5")
 	bg := lipgloss.Color("#1a1b26")
 	dim := lipgloss.Color("#888ea8")
-	muted := lipgloss.Color("#414868")
+	muted := lipgloss.Color("#626a8a")
 
 	primary := lipgloss.Color("#7aa2f7")
 	secondary := lipgloss.Color("#bb9af7")

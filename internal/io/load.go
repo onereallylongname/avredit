@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/onereallylongname/avedit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/projection"
 )
 
 // LoadAvroFromFile reads and parses an .avsc file into a Projection.

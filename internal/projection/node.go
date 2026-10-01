@@ -13,7 +13,7 @@ package projection
 import (
 	"sync/atomic"
 
-	"github.com/onereallylongname/avedit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/schema"
 )
 
 // nodeCounter provides unique sequential IDs.
@@ -133,6 +133,15 @@ func (n *Node) Namespace() string {
 	if m := n.NativeMap(); m != nil {
 		ns, _ := m["namespace"].(string)
 		return ns
+	}
+	return ""
+}
+
+// Doc returns the "doc" field from native attributes, or empty.
+func (n *Node) Doc() string {
+	if m := n.NativeMap(); m != nil {
+		doc, _ := m["doc"].(string)
+		return doc
 	}
 	return ""
 }

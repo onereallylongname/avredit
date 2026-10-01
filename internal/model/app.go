@@ -1,4 +1,4 @@
-// Package model implements the bubbletea TUI models for avedit.
+// Package model implements the bubbletea TUI models for avredit.
 //
 // Architecture: App is the root model that owns all sub-models (tree, details, explorer,
 // statusbar) and orchestrates mode transitions, overlay management, and command execution.
@@ -21,20 +21,22 @@ import (
 	"image/color"
 	"log/slog"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/onereallylongname/avedit/internal/command"
-	"github.com/onereallylongname/avedit/internal/config"
-	"github.com/onereallylongname/avedit/internal/io"
-	"github.com/onereallylongname/avedit/internal/logging"
-	"github.com/onereallylongname/avedit/internal/projection"
-	"github.com/onereallylongname/avedit/internal/schema"
-	"github.com/onereallylongname/avedit/internal/search"
-	"github.com/onereallylongname/avedit/internal/theme"
-	"github.com/onereallylongname/avedit/internal/validation"
+	"github.com/onereallylongname/avredit/internal/command"
+	"github.com/onereallylongname/avredit/internal/config"
+	"github.com/onereallylongname/avredit/internal/io"
+	"github.com/onereallylongname/avredit/internal/logging"
+	"github.com/onereallylongname/avredit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/registry"
+	"github.com/onereallylongname/avredit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/search"
+	"github.com/onereallylongname/avredit/internal/theme"
+	"github.com/onereallylongname/avredit/internal/validation"
 )
 
 // AppMode represents the current input mode.
@@ -76,11 +78,12 @@ const (
 type Overlay int
 
 const (
-	OverlayNone    Overlay = iota
-	OverlayPicker  Overlay = iota
-	OverlayConfirm Overlay = iota
-	OverlayHelp    Overlay = iota
-	OverlayNotify  Overlay = iota
+	OverlayNone           Overlay = iota
+	OverlayPicker         Overlay = iota
+	OverlayConfirm        Overlay = iota
+	OverlayHelp           Overlay = iota
+	OverlayNotify         Overlay = iota
+	OverlayRegistryReport Overlay = iota
 )
 
 // OverlayAction identifies what triggered an overlay.
@@ -98,6 +101,7 @@ const (
 	ActionQuit        OverlayAction = iota
 	ActionSetLogLevel OverlayAction = iota
 	ActionShowProblems OverlayAction = iota
+	ActionLoadRegistry OverlayAction = iota
 )
 
 // FlashLevel determines the visual style of a flash message.
@@ -152,6 +156,14 @@ type App struct {
 	cmdHistory []string
 	cmdHistIdx int // -1 means not browsing history
 
+	// Tab-completion cycling state for the command bar (":registry check
+	// <subject>" etc). Reset to inactive on any edit other than repeated
+	// "tab" presses, so a fresh Tab always recomputes matches.
+	cmdCompletions    []string // full candidate list for the current word, in cycle order
+	cmdCompletionIdx  int      // index into cmdCompletions currently applied to cmdBuf
+	cmdCompletionPrefix string // buffer text before the word being completed (kept stable across cycles)
+	cmdCompletionActive bool
+
 	// Move state (maps picker display name → node ID)
 	moveTargets map[string]string
 
@@ -160,6 +172,17 @@ type App struct {
 
 	// Pending file to open (for confirm-on-load-if-unsaved flow)
 	pendingFile string
+
+	// Pending registry fetch (for confirm-on-load-if-unsaved flow)
+	pendingRegistrySubject string
+	pendingRegistryVersion int
+
+	// Last ":registry check" result (only the most recent is kept — a new
+	// check simply replaces it). Viewed via the OverlayRegistryReport
+	// overlay (auto-opened on an incompatible result, or reopened anytime
+	// with ":registry report") and optionally saved to disk from there.
+	lastRegistryCheck  *RegistryCheckReport
+	registryReportScrl int
 
 	// Help overlay scroll offset
 	helpScroll int
@@ -183,6 +206,22 @@ type App struct {
 	// Validation (advisory, never blocks mutations)
 	validator        *validation.Analyzer
 	validationIssues []validation.Issue
+
+	// Schema registry (nil if not configured for this session)
+	registryClient *registry.Client
+	registryLabel  string // short label shown in the explorer panel title, e.g. host
+}
+
+// WithRegistryClient attaches a schema registry client to the App for this
+// session. Credentials are never persisted; the client is built from
+// session-only CLI flags in cmd/avredit/main.go. label is a short display
+// name (e.g. the registry host) shown in the explorer panel title when in
+// Registry mode.
+func (a App) WithRegistryClient(client *registry.Client, label string) App {
+	a.registryClient = client
+	a.registryLabel = label
+	a.explorer.SetRegistryLabel(label)
+	return a
 }
 
 // NewApp creates a new root App model from a loaded projection.
@@ -390,6 +429,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.updateLayout()
 				return a, nil
 			}
+		case "ctrl+g":
+			if a.mode == ModeNormal {
+				return a.toggleRegistryMode()
+			}
 		case "1":
 			if a.mode == ModeNormal {
 				a.focusPanel(1)
@@ -463,6 +506,39 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case PanelExplorer:
 			return a.updateExplorer(msg)
 		}
+
+	case registrySubjectsMsg:
+		a.explorer.SetRegistryLoading(false)
+		if msg.err != nil {
+			a.flashError("Registry: failed to list subjects: "+msg.err.Error(), "error", msg.err)
+			return a, nil
+		}
+		a.explorer.SetRegistrySubjects(msg.subjects)
+		a.flashInfo(fmt.Sprintf("Registry: %d subjects", len(msg.subjects)))
+		return a, nil
+
+	case registryVersionsMsg:
+		if msg.err != nil {
+			a.flashError("Registry: failed to list versions: "+msg.err.Error(), "subject", msg.subject, "error", msg.err)
+			return a, nil
+		}
+		a.explorer.SetRegistryVersions(msg.subject, msg.versions)
+		return a, nil
+
+	case registrySchemaMsg:
+		if msg.err != nil {
+			a.flashError("Registry: failed to fetch schema: "+msg.err.Error(), "subject", msg.subject, "version", msg.version, "error", msg.err)
+			return a, nil
+		}
+		return a.openRegistrySchema(msg.subject, msg.version, msg.schemaJSON)
+
+	case registryCompatMsg:
+		if msg.err != nil {
+			a.flashError("Registry: compatibility check failed: "+msg.err.Error(), "subject", msg.subject, "error", msg.err)
+			return a, nil
+		}
+		a.applyRegistryCompatResult(msg.subject, msg)
+		return a, nil
 	}
 
 	return a, nil
@@ -568,7 +644,7 @@ func (a *App) runSearch() {
 		a.matchedIDs = nil
 	} else {
 		// Search nodes in tree
-		filters := search.Filters{Name: query}
+		filters := search.ParseQuery(query)
 		a.searchResults = search.QueryNodes(a.proj, filters)
 		a.searchIdx = 0
 		a.matchedIDs = make(map[string]bool, len(a.searchResults))
@@ -590,6 +666,11 @@ func (a *App) jumpToSearchResult() {
 
 // updateCommand handles keys in command mode.
 func (a App) updateCommand(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Any key other than "tab" ends a completion-cycling sequence, so the
+	// next Tab press starts a fresh match instead of advancing the cycle.
+	if msg.String() != "tab" {
+		a.cmdCompletionActive = false
+	}
 	switch msg.String() {
 	case "enter":
 		cmd := string(a.cmdBuf)
@@ -664,37 +745,108 @@ func (a App) updateCommand(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // knownCommands lists all available command names for tab completion.
-var knownCommands = []string{"w", "q", "q!", "wq", "export", "theme", "open", "e", "notifications", "notify", "validate", "log-level", "problems", "diagnostics"}
+var knownCommands = []string{"w", "q", "q!", "wq", "export", "theme", "open", "e", "notifications", "notify", "validate", "log-level", "problems", "diagnostics", "registry"}
 
-// completeCommand attempts to autocomplete the current command buffer.
+// knownRegistrySubcommands lists ":registry <sub>" subcommands for tab completion.
+var knownRegistrySubcommands = []string{"check", "report"}
+
+// completeCommand attempts to autocomplete the current command buffer. It
+// completes the command name itself (first word), and additionally knows
+// how to complete ":registry"'s subcommand and, for ":registry check",
+// subject names fetched from the registry — reusing the same
+// longest-common-prefix completion logic (see completeWord) throughout.
 func (a *App) completeCommand() {
 	input := string(a.cmdBuf)
-	// Only autocomplete the command word (first word before space)
-	if strings.Contains(input, " ") {
+	fields := strings.Fields(input)
+	endsWithSpace := strings.HasSuffix(input, " ")
+
+	if len(fields) == 0 {
 		return
 	}
-	var matches []string
-	for _, cmd := range knownCommands {
-		if strings.HasPrefix(cmd, input) && cmd != input {
-			matches = append(matches, cmd)
-		}
+
+	// First word, not yet followed by a space: completing the command name.
+	if len(fields) == 1 && !endsWithSpace {
+		a.completeWord(input, knownCommands)
+		return
 	}
-	if len(matches) == 1 {
-		a.cmdBuf = []rune(matches[0])
+
+	if fields[0] != "registry" {
+		return
+	}
+	switch {
+	case (len(fields) == 1 && endsWithSpace) || (len(fields) == 2 && !endsWithSpace):
+		// ":registry " or ":registry <partial>" — complete the subcommand.
+		a.completeWord(input, knownRegistrySubcommands)
+	case fields[1] == "check" && ((len(fields) == 2 && endsWithSpace) || (len(fields) == 3 && !endsWithSpace)):
+		// ":registry check " or ":registry check <partial>" — complete a subject name.
+		a.completeWord(input, a.explorer.RegistrySubjects())
+	}
+}
+
+// completeWord completes the final whitespace-delimited word of input
+// against candidates. A single match completes it fully. Multiple matches
+// fill in their longest common prefix on the first Tab press (like
+// shell/Vim completion) and are remembered on the App so that repeated Tab
+// presses cycle through each candidate in turn; renderCommandBar shows the
+// candidate list with the active one highlighted so the user can see what
+// they're cycling through.
+func (a *App) completeWord(input string, candidates []string) {
+	// Continuing a cycle started by a previous Tab press on this same word.
+	if a.cmdCompletionActive && len(a.cmdCompletions) > 0 {
+		a.cmdCompletionIdx++
+		if a.cmdCompletionIdx >= len(a.cmdCompletions) {
+			a.cmdCompletionIdx = 0
+		}
+		a.cmdBuf = []rune(a.cmdCompletionPrefix + a.cmdCompletions[a.cmdCompletionIdx])
 		a.cmdCursor = len(a.cmdBuf)
-	} else if len(matches) > 1 {
-		// Find longest common prefix
-		prefix := matches[0]
-		for _, m := range matches[1:] {
-			for !strings.HasPrefix(m, prefix) {
-				prefix = prefix[:len(prefix)-1]
-			}
-		}
-		if len(prefix) > len(input) {
-			a.cmdBuf = []rune(prefix)
-			a.cmdCursor = len(a.cmdBuf)
+		return
+	}
+
+	prefix := ""
+	partial := input
+	if idx := strings.LastIndex(input, " "); idx >= 0 {
+		prefix = input[:idx+1]
+		partial = input[idx+1:]
+	}
+	var matches []string
+	for _, c := range candidates {
+		if strings.HasPrefix(c, partial) {
+			matches = append(matches, c)
 		}
 	}
+	if len(matches) == 0 {
+		return
+	}
+	sort.Strings(matches)
+	if len(matches) == 1 {
+		a.cmdBuf = []rune(prefix + matches[0])
+		a.cmdCursor = len(a.cmdBuf)
+		a.cmdCompletionActive = false
+		a.cmdCompletions = nil
+		return
+	}
+
+	// Multiple matches: fill in the longest common prefix immediately, and
+	// remember the full set so subsequent Tab presses cycle through them.
+	common := matches[0]
+	for _, m := range matches[1:] {
+		for !strings.HasPrefix(m, common) {
+			common = common[:len(common)-1]
+		}
+	}
+	a.cmdCompletions = matches
+	a.cmdCompletionPrefix = prefix
+	a.cmdCompletionActive = true
+	if len(common) > len(partial) {
+		// Nothing selected yet — just the common prefix is shown; the next
+		// Tab press starts cycling at the first candidate.
+		a.cmdCompletionIdx = -1
+		a.cmdBuf = []rune(prefix + common)
+	} else {
+		a.cmdCompletionIdx = 0
+		a.cmdBuf = []rune(prefix + matches[0])
+	}
+	a.cmdCursor = len(a.cmdBuf)
 }
 
 // executeCommand parses and executes a command string.
@@ -803,6 +955,8 @@ func (a App) executeCommand(raw string) (tea.Model, tea.Cmd) {
 		a.overlay = OverlayPicker
 		a.overlayAction = ActionShowProblems
 		return a, nil
+	case "registry":
+		return a.executeRegistryCommand(args)
 	default:
 		a.flashError("Unknown command: :" + raw)
 	}
@@ -896,7 +1050,10 @@ func (a App) updateTree(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (a App) updateExplorer(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		if path, ok := a.explorer.EnterSelected(); ok {
+		action := a.explorer.EnterSelected()
+		switch action.Kind {
+		case ExplorerActionOpenFile:
+			path := action.Path
 			if a.dirty {
 				a.pendingFile = path
 				a.confirm = NewConfirm("Unsaved changes. Load anyway?", a.theme)
@@ -905,10 +1062,17 @@ func (a App) updateExplorer(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 			return a.openFile(path)
+		case ExplorerActionFetchSchema:
+			return a.beginRegistryFetch(action.Subject, action.Version)
 		}
-		return a, nil
 	default:
 		a.explorer = a.explorer.HandleKey(msg)
+	}
+	// l/space (and enter on an unfetched subject) may have queued an async
+	// version fetch via toggleExpand; poll for it since those paths don't
+	// otherwise return actionable data to App.
+	if subject, ok := a.explorer.TakePendingFetch(); ok {
+		return a, a.fetchRegistryVersionsCmd(subject)
 	}
 	return a, nil
 }
@@ -964,7 +1128,13 @@ func (a App) updateDetails(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "enter":
 				return a.commitDetailEdit()
-			case "shift+enter":
+			case "shift+enter", "alt+enter", "ctrl+j":
+				// shift+enter requires terminal support for the Kitty/CSI-u
+				// keyboard protocol and is not recognized by many terminals
+				// and multiplexers (it arrives identical to plain "enter").
+				// alt+enter (meta-sends-escape) and ctrl+j (raw line feed)
+				// are recognized by virtually all terminals, so they're
+				// offered as reliable fallbacks for inserting a newline.
 				attr := a.details.CursorAttr()
 				if attr != nil && attr.Kind == AttrMultiline {
 					a.details.InsertNewline()
@@ -1156,6 +1326,20 @@ func (a App) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if a.notifyScrl > 0 {
 				a.notifyScrl--
 			}
+		}
+	case OverlayRegistryReport:
+		switch msg.String() {
+		case "esc", "q":
+			a.overlay = OverlayNone
+			a.registryReportScrl = 0
+		case "j", "down":
+			a.registryReportScrl++
+		case "k", "up":
+			if a.registryReportScrl > 0 {
+				a.registryReportScrl--
+			}
+		case "s":
+			a.saveRegistryReport()
 		}
 	}
 	return a, nil
@@ -1666,6 +1850,13 @@ func (a App) handleConfirmResult() (tea.Model, tea.Cmd) {
 		if a.pendingFile != "" {
 			return a.openFile(a.pendingFile)
 		}
+	case ActionLoadRegistry:
+		if a.pendingRegistrySubject != "" {
+			subject, version := a.pendingRegistrySubject, a.pendingRegistryVersion
+			a.pendingRegistrySubject = ""
+			a.flashInfo(fmt.Sprintf("Registry: fetching %s v%d...", subject, version))
+			return a, a.fetchRegistrySchemaCmd(subject, version)
+		}
 	case ActionQuit:
 		return a.quit()
 	}
@@ -1749,8 +1940,16 @@ func (a App) View() tea.View {
 	// Update status bar state
 	a.statusbar.SetMode(a.mode)
 	stats := projection.CalculateStats(a.proj)
-	// Set node path in status bar
-	if sel := a.tree.SelectedNode(); sel != nil && len(sel.Path) > 0 {
+	// Set node path in status bar: full selected explorer entry name when the
+	// explorer is focused (its own panel truncates long names to fit width),
+	// otherwise the tree's selected node path.
+	if a.focus == PanelExplorer {
+		if name := a.explorer.SelectedDisplayName(); name != "" {
+			a.statusbar.SetNodePath(name)
+		} else {
+			a.statusbar.SetNodePath("")
+		}
+	} else if sel := a.tree.SelectedNode(); sel != nil && len(sel.Path) > 0 {
 		a.statusbar.SetNodePath(formatNodePath(sel.Path))
 	} else {
 		a.statusbar.SetNodePath("")
@@ -1814,7 +2013,7 @@ func (a App) renderPanel(content string, panel FocusPanel) string {
 	var title string
 	switch panel {
 	case PanelExplorer:
-		num, title = "1", "Files"
+		num, title = "1", a.explorer.Title()
 	case PanelTree:
 		num, title = "2", "Schema"
 	case PanelDetails:
@@ -1853,7 +2052,17 @@ func (a App) renderPanel(content string, panel FocusPanel) string {
 	}
 
 	// Build the titled top border: ╭─ N Title ─────╮
+	// The title (e.g. a long registry hostname) must never make the border
+	// wider than the panel — truncate it to fit, keeping the number prefix
+	// visible, otherwise the border overflows and misaligns sibling panels.
 	titleText := " " + num + " " + title + " "
+	maxTitleWidth := innerW - 2
+	if maxTitleWidth < 0 {
+		maxTitleWidth = 0
+	}
+	if lipgloss.Width(titleText) > maxTitleWidth {
+		titleText = ansi.Truncate(titleText, maxTitleWidth, "…")
+	}
 	styledTitle := titleStyle.Render(titleText)
 	titleWidth := lipgloss.Width(styledTitle)
 
@@ -1995,6 +2204,9 @@ func (a App) renderOverlay() string {
 		}
 		visible = append(visible, "", dimStyle.Render(hint))
 		overlayContent = strings.Join(visible, "\n")
+
+	case OverlayRegistryReport:
+		overlayContent = a.renderRegistryReportOverlay()
 	}
 
 	overlayBox := lipgloss.NewStyle().
@@ -2042,7 +2254,34 @@ func (a App) renderCommandBar() string {
 	prompt := a.theme.StatusCommand.Render(" : ")
 	input := renderLineInput(a.cmdBuf, a.cmdCursor, a.theme.StatusFile)
 	bar := prompt + input
+	if a.cmdCompletionActive && len(a.cmdCompletions) > 0 {
+		bar += "  " + a.renderCompletionSuggestions()
+	}
+	// Guard against the suggestion list (or a long command buffer) making
+	// the bar wider than the terminal — StatusBar.Width only pads, it does
+	// not truncate, so an overlong bar would wrap/overflow the terminal.
+	if lipgloss.Width(bar) > a.width {
+		bar = ansi.Truncate(bar, a.width, "…")
+	}
 	return a.theme.StatusBar.Width(a.width).Render(bar)
+}
+
+// renderCompletionSuggestions renders the current tab-completion candidate
+// list inline (e.g. after ":registry check e<Tab>"), highlighting whichever
+// candidate is currently applied to cmdBuf so that cycling through matches
+// with repeated Tab presses is visible to the user.
+func (a App) renderCompletionSuggestions() string {
+	dim := lipgloss.NewStyle().Foreground(a.theme.Dim)
+	active := lipgloss.NewStyle().Foreground(a.theme.Primary).Bold(true).Underline(true)
+	parts := make([]string, len(a.cmdCompletions))
+	for i, c := range a.cmdCompletions {
+		if i == a.cmdCompletionIdx {
+			parts[i] = active.Render(c)
+		} else {
+			parts[i] = dim.Render(c)
+		}
+	}
+	return dim.Render("[") + strings.Join(parts, dim.Render(" ")) + dim.Render("]")
 }
 
 // renderLineInput renders a rune buffer with a thin line cursor.

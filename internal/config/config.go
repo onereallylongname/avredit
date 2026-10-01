@@ -1,5 +1,5 @@
-// Package config handles user configuration for avedit.
-// Configuration is loaded from ~/.config/avedit/config.json.
+// Package config handles user configuration for avredit.
+// Configuration is loaded from ~/.config/avredit/config.json.
 package config
 
 import (
@@ -14,6 +14,12 @@ type Config struct {
 	Theme     string `json:"theme"`      // Default theme name
 	ThemesDir string `json:"themes_dir"` // Custom themes directory (optional)
 	LogLevel  string `json:"log_level"`  // Log level: debug, info, warn, error (default: error)
+
+	// RegistryURL is the default Schema Registry base URL (e.g. a Confluent
+	// Cloud endpoint). Only the URL is persisted; credentials are never
+	// written to disk and must be supplied per-session via --token/--user/
+	// --password CLI flags (see cmd/avredit/main.go).
+	RegistryURL string `json:"registry_url,omitempty"`
 }
 
 // DefaultConfig returns sensible defaults.
@@ -24,7 +30,7 @@ func DefaultConfig() Config {
 	}
 }
 
-// Load reads the config from the standard path (~/.config/avedit/config.json).
+// Load reads the config from the standard path (~/.config/avredit/config.json).
 // Returns default config if the file doesn't exist.
 func Load() Config {
 	cfg := DefaultConfig()
@@ -48,7 +54,7 @@ func Dir() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".config", "avedit")
+	return filepath.Join(home, ".config", "avredit")
 }
 
 // FilePath returns the full path to the config file.
@@ -64,7 +70,7 @@ func (c Config) ThemesDirResolved() string {
 	return ""
 }
 
-// Save writes the config to the standard path (~/.config/avedit/config.json).
+// Save writes the config to the standard path (~/.config/avredit/config.json).
 func (c Config) Save() error {
 	dir := Dir()
 	if dir == "" {

@@ -135,6 +135,33 @@ func TypeComponentScore(typeLabel, needle string) float64 {
 	return best
 }
 
+// DocScore scores free-text prose (such as a "doc" field) against a search
+// term using substring containment rather than pure fuzzy subsequence
+// matching, since Levenshtein-based similarity degrades quickly on long
+// sentences and would rarely surface useful doc matches otherwise.
+func DocScore(doc, needle string) float64 {
+	if doc == "" || needle == "" {
+		return 0
+	}
+	d := strings.ToLower(doc)
+	n := strings.ToLower(needle)
+
+	if d == n {
+		return 1.0
+	}
+	if !strings.Contains(d, n) {
+		return 0
+	}
+	// Whole-word containment scores higher than a mid-word substring match.
+	for _, word := range strings.Fields(d) {
+		word = strings.Trim(word, ".,;:!?()[]{}\"'")
+		if word == n {
+			return 0.85
+		}
+	}
+	return 0.6
+}
+
 func toLower(b byte) byte {
 	if b >= 'A' && b <= 'Z' {
 		return b + 32

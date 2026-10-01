@@ -2,7 +2,7 @@
 
 ## Overview
 
-Comparison of leading Go CLI argument parsing libraries with focus on bloat, usability, and suitability for TUI applications like avedit.
+Comparison of leading Go CLI argument parsing libraries with focus on bloat, usability, and suitability for TUI applications like avredit.
 
 ---
 

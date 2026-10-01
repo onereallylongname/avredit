@@ -69,7 +69,7 @@ func TestInit(t *testing.T) {
 
 	// Verify log file was created after writing
 	slog.Info("test message", "key", "value")
-	logFile := filepath.Join(logDir, "avedit.log")
+	logFile := filepath.Join(logDir, "avredit.log")
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		t.Fatal("log file was not created")
 	}

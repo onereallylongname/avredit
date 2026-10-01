@@ -1,4 +1,4 @@
-// Package theme defines the visual theme system for avedit.
+// Package theme defines the visual theme system for avredit.
 // Themes are collections of lipgloss styles used by all UI components.
 package theme
 

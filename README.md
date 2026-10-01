@@ -1,26 +1,26 @@
 ```
-   █████████                                     ██████████     █████  ███  ███████████             ███
-  ███▒▒▒▒▒███                                   ▒▒███▒▒▒▒▒█    ▒▒███  ▒▒▒  ▒█▒▒▒███▒▒▒█            ▒▒▒
- ▒███    ▒███  █████ █████ ████████   ██████     ▒███  █ ▒   ███████  ████ ▒   ▒███  ▒  █████ ████ ████
- ▒███████████ ▒▒███ ▒▒███ ▒▒███▒▒███ ███▒▒███    ▒██████    ███▒▒███ ▒▒███     ▒███    ▒▒███ ▒███ ▒▒███
- ▒███▒▒▒▒▒███  ▒███  ▒███  ▒███ ▒▒▒ ▒███ ▒███    ▒███▒▒█   ▒███ ▒███  ▒███     ▒███     ▒███ ▒███  ▒███
- ▒███    ▒███  ▒▒███ ███   ▒███     ▒███ ▒███    ▒███ ▒   █▒███ ▒███  ▒███     ▒███     ▒███ ▒███  ▒███
- █████   █████  ▒▒█████    █████    ▒▒██████     ██████████▒▒████████ █████    █████    ▒▒████████ ████
-▒▒▒▒▒   ▒▒▒▒▒    ▒▒▒▒▒    ▒▒▒▒▒      ▒▒▒▒▒▒     ▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒▒▒▒▒ ▒▒▒▒▒    ▒▒▒▒▒      ▒▒▒▒▒▒▒▒ ▒▒▒▒▒
+   █████████                         ██████████     █████  ███  ███████████             ███
+  ███▒▒▒▒▒███                       ▒▒███▒▒▒▒▒█    ▒▒███  ▒▒▒  ▒█▒▒▒███▒▒▒█            ▒▒▒
+ ▒███    ▒███  █████ █████ ████████  ▒███  █ ▒   ███████  ████ ▒   ▒███  ▒  █████ ████ ████
+ ▒███████████ ▒▒███ ▒▒███ ▒▒███▒▒███ ▒██████    ███▒▒███ ▒▒███     ▒███    ▒▒███ ▒███ ▒▒███
+ ▒███▒▒▒▒▒███  ▒███  ▒███  ▒███ ▒▒▒  ▒███▒▒█   ▒███ ▒███  ▒███     ▒███     ▒███ ▒███  ▒███
+ ▒███    ▒███  ▒▒███ ███   ▒███      ▒███ ▒   █▒███ ▒███  ▒███     ▒███     ▒███ ▒███  ▒███
+ █████   █████  ▒▒█████    █████     ██████████▒▒████████ █████    █████    ▒▒████████ ████
+▒▒▒▒▒   ▒▒▒▒▒    ▒▒▒▒▒    ▒▒▒▒▒     ▒▒▒▒▒▒▒▒▒▒  ▒▒▒▒▒▒▒▒ ▒▒▒▒▒    ▒▒▒▒▒      ▒▒▒▒▒▒▒▒ ▒▒▒▒▒
 ```
 
 | [Features](#features) | [Installation](#installation) | [Usage](#usage) | [Configuration](#configuration) | [Themes](#themes) | [For developers](#for-developers) |
 
-# avedit
+# avredit
 
 A terminal-based Avro schema editor inspired by lazygit. Navigate, edit, and manage `.avsc` schemas entirely from your terminal with vim-like keybindings, undo/redo, and live theme switching.
 A port from [avro editor](https://github.com/onereallylongname/avro-editor-static-web), a static html site to render and edit avro schemas.
 
-![intro_gif](docs/images/avedit_show.gif)
+![intro_gif](docs/images/avredit_show.gif)
 
 ## Features
 
-Working with Avro schemas in a text editor means juggling deeply nested JSON, remembering type syntax, and manually tracking named type references. avedit gives you:
+Working with Avro schemas in a text editor means juggling deeply nested JSON, remembering type syntax, and manually tracking named type references. avredit gives you:
 
 - **Visual tree** of your schema structure — instantly understand nesting and types
 - **Safe editing** — undo/redo everything, type pickers prevent typos
@@ -31,7 +31,7 @@ Working with Avro schemas in a text editor means juggling deeply nested JSON, re
 - **Structural mutations** — add, delete, copy, move fields; replace types
 - **Named type propagation** — renaming a type updates all references across the schema
 - **Undo/Redo** — full history stack (500 levels deep) with descriptions
-- [**Search**](#search-prefixes) — prefix filters (`n:`, `t:`, `p:`, `ns:`, `a:`) and fuzzy text matching
+- [**Search**](#search-prefixes) — prefix filters (`n:`, `t:`, `p:`, `ns:`, `a:`, `d:`) and fuzzy text matching (including doc fields)
 - [**File Explorer**](#explorer-normal-mode) — browse, filter, and open `.avsc` files with recursive search
 - [**Commands**](#command-mode) — vim-style `:w`, `:q`, `:wq`, `:export`, `:theme`, `:notifications`
 - [**Diagnostics**](#diagnostics) — `:problems` / `:diagnostics` shows validation errors in a navigable picker
@@ -41,7 +41,7 @@ Working with Avro schemas in a text editor means juggling deeply nested JSON, re
 - **Categorized type picker** — types grouped by Primitives / Complex / Named / Aliases
 - **Notifications** — colored flash messages with scrollable history log
 - **Persistent history** — command and search history saved across sessions
-- [**Config**](#configuration) — user preferences loaded from `~/.config/avedit/config.json`
+- [**Config**](#configuration) — user preferences loaded from `~/.config/avredit/config.json`
 - Diagnostics - `:problems` or `:diagnostics` to list all the validation warning and errors
 
 ## Installation
@@ -49,7 +49,7 @@ Working with Avro schemas in a text editor means juggling deeply nested JSON, re
 ### From source
 
 ```bash
-go install github.com/onereallylongname/avedit/cmd/avedit@latest
+go install github.com/onereallylongname/avredit/cmd/avredit@latest
 ```
 
 _**Note**: Add the go installation path to you $PATH_
@@ -57,25 +57,26 @@ _**Note**: Add the go installation path to you $PATH_
 ## Usage
 
 ```bash
-avedit <schema.avsc>
-avedit <directory>
-avedit                  # opens explorer in CWD
-avedit --log-level debug ./schemas/
-avedit --help
-avedit --version
+avredit <schema.avsc>
+avredit <directory>
+avredit                  # opens explorer in CWD
+avredit --log-level debug ./schemas/
+avredit --registry-url <url> --token <token>   # connect to a Schema Registry
+avredit --help
+avredit --version
 ```
 
 ### Quick Start
 
 ```bash
 # Open a schema file directly
-avedit schema.avsc
+avredit schema.avsc
 
 # Browse a directory of schemas
-avedit ./schemas/
+avredit ./schemas/
 
 # Open in current directory
-avedit
+avredit
 ```
 
 Once inside:
@@ -98,6 +99,7 @@ Once inside:
 | `Tab`       | Switch panel focus   |
 | `1`/`2`/`3` | Focus panel directly |
 | `Ctrl+E`    | Toggle file explorer |
+| `Ctrl+G`    | Switch explorer between Files and Schema Registry |
 | `Esc`       | Cancel / exit mode   |
 | `Ctrl+S`    | Save                 |
 
@@ -166,7 +168,8 @@ Once inside:
 | `p:`   | Parent name            | `p:Customer`     |
 | `ns:`  | Namespace              | `ns:com.payment` |
 | `a:`   | Alias                  | `a:OrderEvent`   |
-| (none) | Free text (all fields) | `timestamp`      |
+| `d:`   | Doc text               | `d:deprecated`   |
+| (none) | Free text (all fields, including doc) | `timestamp` |
 
 ### Command Mode
 
@@ -184,6 +187,65 @@ Once inside:
 | `:diagnostics`     | Alias for `:problems`            |
 | `:log-level [lvl]` | Set log level (picker if no arg) |
 | `:notifications`   | Show notification history        |
+| `:registry check [subject]` | Compatibility check against the registry (see below) |
+| `:registry report` | Reopen the last compatibility check report |
+
+## Schema Registry
+
+avredit can browse and fetch schemas from a **Confluent Cloud** Schema
+Registry (or a self-hosted, Confluent-API-compatible registry). Support is
+targeted specifically at the Confluent Schema Registry REST API; other
+vendors (Apicurio, AWS Glue, etc.) are not tested and may not work.
+
+**This is read-only.** avredit can list subjects, fetch schema versions, and
+run compatibility checks, but it never registers/pushes schemas to the
+registry — fetched schemas load into the editor buffer like any opened
+file, and you save them to disk yourself with `:w <path>`.
+
+### Connecting
+
+Credentials are **session-only**: they're read once from CLI flags at
+startup and never written to disk or config. Only the registry URL itself
+is persisted (in `config.json`), never a token or password.
+
+```bash
+# Bearer token (e.g. Confluent Cloud API key/secret, or another Bearer-style token)
+avredit --registry-url https://psrc-xxxxx.region.aws.confluent.cloud --token <token>
+
+# Basic auth (username/password, e.g. Confluent Cloud API key as username + secret as password)
+avredit --registry-url https://psrc-xxxxx.region.aws.confluent.cloud --user <key> --password <secret>
+```
+
+mTLS client-certificate auth is not supported.
+
+### Browsing
+
+Press `Ctrl+G` to switch the explorer panel from **Files** to **Registry**
+mode (and back). The panel behaves just like the file explorer: subjects
+are shown as expandable tree nodes (`j`/`k`/`h`/`l`/`enter`/`space`), `/`
+searches the currently-fetched subjects, and pressing `enter` on a version
+fetches that schema into the editor.
+
+### Compatibility checking
+
+`:registry check [subject]` checks the currently-open schema for
+compatibility against a subject's latest registered version. If no subject
+is given, avredit infers one from the loaded schema's `namespace`/`name`
+using Confluent's default `TopicNameStrategy` (`<namespace>.<name>-value`).
+
+If the schema **is compatible**, this is just a quiet one-line confirmation
+in the status bar. If it's **not compatible**, a report opens automatically
+showing which top-level fields were **added or removed**, with the
+registry's own detailed per-field failure explanation (fetched via
+`?verbose=true`) shown directly under whichever change it explains —
+anything the registry reports that isn't tied to a specific field appears
+under "Other reasons" instead of being dropped. Long lines wrap to fit the
+terminal, and the registry's own context/config messages (echoed schema
+version, compatibility mode, etc.) are filtered out — only actual failure
+explanations are shown. Only the most recent check is kept — a new check
+replaces it. Reopen it anytime with `:registry report`, and from the report
+press `s` to save it to disk as a timestamped Markdown file (so repeated
+checks never overwrite an earlier saved report).
 
 ## Tips & Tricks
 
@@ -192,14 +254,14 @@ Once inside:
 - **Multiline editing** — For `doc` fields, press `Ctrl+Enter` to add newlines
 - **Explorer search** — `/` in the explorer searches recursively through all subdirectories
 - **History** — Use `↑`/`↓` in search (`/`) and command (`:`) modes to browse previous entries
-- **Unsaved changes** — avedit prompts before quitting if you have unsaved edits
-- **Persistent config** — Theme choice is saved to `~/.config/avedit/config.json` automatically
+- **Unsaved changes** — avredit prompts before quitting if you have unsaved edits
+- **Persistent config** — Theme choice is saved to `~/.config/avredit/config.json` automatically
 - **Multiple theme dirs** — Set `themes_dir` in config to load additional themes alongside built-ins
 - **Diagnostics** — Use the command `:diagnostics` to list diagnostics, press enter on any to focus on the field at fault
 
 ## Diagnostics
 
-avedit performs advisory validation on every schema mutation:
+avredit performs advisory validation on every schema mutation:
 
 - **`:validate`** — manually trigger validation, shows error/warning summary
 - **`:problems`** / **`:diagnostics`** — opens a navigable picker listing all issues
@@ -219,7 +281,7 @@ avedit performs advisory validation on every schema mutation:
 
 ## Logging
 
-avedit writes structured logs to `~/.config/avedit/log/avedit.log`:
+avredit writes structured logs to `~/.config/avredit/log/avredit.log`:
 
 - **Rotation**: 10 MB max file size
 - **Format**: JSON-structured slog output with timestamps
@@ -227,7 +289,7 @@ avedit writes structured logs to `~/.config/avedit/log/avedit.log`:
 
 ```bash
 # Run with debug logging
-avedit --log-level debug schema.avsc
+avredit --log-level debug schema.avsc
 
 # Change level at runtime
 :log-level         # opens picker (debug/info/warn/error)
@@ -238,7 +300,7 @@ All internal errors (save/open/edit/delete/copy/move failures) are logged with s
 
 ## Configuration
 
-avedit reads configuration from `~/.config/avedit/config.json`:
+avredit reads configuration from `~/.config/avredit/config.json`:
 
 ```json
 {
@@ -257,12 +319,12 @@ avedit reads configuration from `~/.config/avedit/config.json`:
 ### Theme discovery order
 
 1. `./themes/` (current working directory)
-2. Next to the `avedit` executable
-3. `~/.config/avedit/themes/`
+2. Next to the `avredit` executable
+3. `~/.config/avredit/themes/`
 
 ## Themes
 
-Themes are JSON files. avedit ships with: `dark`, `light`, `monokai`, `catppuccin-mocha`, `tokyo-night`, `rose-pine`, `dracula`, `gruvbox`, `one-dark-pro`, `vscode-light` at [themes/](https://github.com/onereallylongname/avedit/tree/main/themes).
+Themes are JSON files. avredit ships with: `dark`, `light`, `monokai`, `catppuccin-mocha`, `tokyo-night`, `rose-pine`, `dracula`, `gruvbox`, `one-dark-pro`, `vscode-light` at [themes/](https://github.com/onereallylongname/avredit/tree/main/themes).
 
 Switch at runtime with `:theme` (opens picker) or `:theme <name>`.
 
@@ -362,17 +424,17 @@ Themes can override all UI symbols. Add a `"symbols"` section (all fields option
 
 ```bash
 # Create config directory
-mkdir -p ~/.config/avedit/themes
+mkdir -p ~/.config/avredit/themes
 
 # Write config
-cat > ~/.config/avedit/config.json << 'EOF'
+cat > ~/.config/avredit/config.json << 'EOF'
 {
   "theme": "rose-pine"
 }
 EOF
 
 # Copy or create a custom theme
-cat > ~/.config/avedit/themes/custom.json << 'EOF'
+cat > ~/.config/avredit/themes/custom.json << 'EOF'
 {
   "name": "custom",
   "fg": "#d4d4d4",
@@ -420,7 +482,7 @@ MIT
 ## Architecture
 
 ```
-cmd/avedit/main.go          Entry point + CLI flags
+cmd/avredit/main.go          Entry point + CLI flags
 internal/
   config/                   User configuration + persistent history
   logging/                  Structured logging (slog + lumberjack rotation)
@@ -438,7 +500,7 @@ docs/                       Architecture docs + plan
 
 ## How It Works
 
-avedit uses a **projection model** architecture:
+avredit uses a **projection model** architecture:
 
 ```
 .avsc → Parse → Projection (flat node map) → Render UI
@@ -465,12 +527,12 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design documenta
 ## TODO
 
 - [ ] Packaging
-  - [ ] Homebrew (macOS/Linux) `brew install onereallylongname/tap/avedit`
+  - [ ] Homebrew (macOS/Linux) `brew install onereallylongname/tap/avredit`
   - [ ] Scoop (Windows)
 
 ```powershell
-scoop bucket add avedit https://github.com/onereallylongname/scoop-bucket
-scoop install avedit
+scoop bucket add avredit https://github.com/onereallylongname/scoop-bucket
+scoop install avredit
 ```
 
 - [ ] Pre-built binaries

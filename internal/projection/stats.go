@@ -1,6 +1,6 @@
 package projection
 
-import "github.com/onereallylongname/avedit/internal/schema"
+import "github.com/onereallylongname/avredit/internal/schema"
 
 // Stats holds computed statistics about a schema.
 type Stats struct {

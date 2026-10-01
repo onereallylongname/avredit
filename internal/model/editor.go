@@ -18,8 +18,8 @@ type Editor struct {
 
 // EditorStyle holds the visual styles for the editor.
 type EditorStyle struct {
-	Text       lipgloss.Style
-	Cursor     lipgloss.Style
+	Text        lipgloss.Style
+	Cursor      lipgloss.Style
 	Placeholder lipgloss.Style
 }
 
@@ -174,6 +174,134 @@ func (e Editor) View() string {
 	}
 
 	return sb.String()
+}
+
+// RenderWrapped renders the editor content word-wrapped to fit within the given
+// width, returning one rendered string per visual row plus the index of the row
+// that contains the cursor. Existing newlines (from ctrl+enter) are treated as
+// hard breaks; long lines are soft-wrapped at word boundaries (falling back to a
+// hard character break when a single word exceeds the width). This guarantees the
+// cursor is always present on one of the returned rows, so callers can keep it
+// visible without truncating or losing content.
+func (e Editor) RenderWrapped(width int) (lines []string, cursorRow int) {
+	if width < 1 {
+		width = 1
+	}
+	value := e.value
+	cursor := e.cursor
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor > len(value) {
+		cursor = len(value)
+	}
+
+	// Split into hard lines on real '\n' characters. Ranges are [s, e] and
+	// partition [0, len(value)] with no gaps, so every cursor offset maps to
+	// exactly one hard line (see loop below).
+	type hardLine struct{ s, e int }
+	var hardLines []hardLine
+	start := 0
+	for i, r := range value {
+		if r == '\n' {
+			hardLines = append(hardLines, hardLine{start, i})
+			start = i + 1
+		}
+	}
+	hardLines = append(hardLines, hardLine{start, len(value)})
+
+	for _, hl := range hardLines {
+		seg := value[hl.s:hl.e]
+		spans := wrapRunes(seg, width)
+
+		localCursor := -1
+		hasCursor := cursor >= hl.s && cursor <= hl.e
+		if hasCursor {
+			localCursor = cursor - hl.s
+		}
+
+		for si, sp := range spans {
+			spanCursor := -1
+			if hasCursor {
+				if localCursor >= sp[0] && localCursor < sp[1] {
+					spanCursor = localCursor - sp[0]
+				} else if si == len(spans)-1 && localCursor == len(seg) {
+					// Cursor sits at the very end of this hard line's text.
+					spanCursor = localCursor - sp[0]
+				}
+			}
+			if spanCursor >= 0 {
+				cursorRow = len(lines)
+			}
+			lines = append(lines, e.renderCursorSpan(seg[sp[0]:sp[1]], spanCursor))
+		}
+	}
+	return lines, cursorRow
+}
+
+// renderCursorSpan renders a single visual line of runes, highlighting the rune
+// at localCursor (if >= 0) with the cursor style. localCursor == len(seg) means
+// the cursor sits past the last rune (rendered as a trailing block cursor).
+func (e Editor) renderCursorSpan(seg []rune, localCursor int) string {
+	if !e.active || localCursor < 0 {
+		return e.style.Text.Render(string(seg))
+	}
+
+	var sb strings.Builder
+	if localCursor > 0 {
+		sb.WriteString(e.style.Text.Render(string(seg[:localCursor])))
+	}
+	if localCursor < len(seg) {
+		sb.WriteString(e.style.Cursor.Render(string(seg[localCursor])))
+		if localCursor+1 < len(seg) {
+			sb.WriteString(e.style.Text.Render(string(seg[localCursor+1:])))
+		}
+	} else {
+		sb.WriteString(e.style.Cursor.Render(" "))
+	}
+	return sb.String()
+}
+
+// wrapRunes computes word-wrap spans for a single line of runes (no embedded
+// newlines), each span being a [start, end) rune-index pair. Spans partition
+// the input exactly (no runes are dropped), preferring to break at spaces;
+// a word longer than width is hard-broken. An empty input yields one empty span
+// so blank lines are preserved.
+func wrapRunes(line []rune, width int) [][2]int {
+	if width < 1 {
+		width = 1
+	}
+	n := len(line)
+	if n == 0 {
+		return [][2]int{{0, 0}}
+	}
+
+	var spans [][2]int
+	start := 0
+	for start < n {
+		end := start + width
+		if end >= n {
+			spans = append(spans, [2]int{start, n})
+			break
+		}
+		breakAt := -1
+		for i := end; i > start; i-- {
+			if line[i] == ' ' {
+				breakAt = i
+				break
+			}
+		}
+		if breakAt == -1 {
+			// No space to break on; hard break at width.
+			spans = append(spans, [2]int{start, end})
+			start = end
+		} else {
+			// Include the space itself on this line so offsets stay exact.
+			spans = append(spans, [2]int{start, breakAt + 1})
+			start = breakAt + 1
+		}
+	}
+	return spans
 }
 
 // isControlKey returns true if the keypress is a non-printable control sequence.

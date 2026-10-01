@@ -3,8 +3,8 @@ package validation
 import (
 	"fmt"
 
-	"github.com/onereallylongname/avedit/internal/projection"
-	"github.com/onereallylongname/avedit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/schema"
 )
 
 // RuleDuplicateFieldNames checks for duplicate field names within each record.

@@ -3,8 +3,8 @@ package command
 import (
 	"fmt"
 
-	"github.com/onereallylongname/avedit/internal/projection"
-	"github.com/onereallylongname/avedit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/schema"
 )
 
 // ReplaceTypeParams defines parameters for the ReplaceType command.

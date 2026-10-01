@@ -1,4 +1,4 @@
-// Package validation provides advisory schema analysis for avedit projections.
+// Package validation provides advisory schema analysis for avredit projections.
 //
 // Design principles:
 //   - Pure analysis: never blocks mutations, only reports findings
@@ -18,7 +18,7 @@
 package validation
 
 import (
-	"github.com/onereallylongname/avedit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/projection"
 )
 
 // Severity classifies the importance of a validation issue.

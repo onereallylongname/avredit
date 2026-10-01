@@ -3,7 +3,7 @@ package schema_test
 import (
 	"testing"
 
-	"github.com/onereallylongname/avedit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/schema"
 )
 
 func TestValidateName(t *testing.T) {

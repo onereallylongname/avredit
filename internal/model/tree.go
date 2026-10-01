@@ -6,9 +6,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/onereallylongname/avedit/internal/projection"
-	"github.com/onereallylongname/avedit/internal/schema"
-	"github.com/onereallylongname/avedit/internal/theme"
+	"github.com/onereallylongname/avredit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/theme"
 )
 
 // TreeLine represents a single visible line in the flattened tree.

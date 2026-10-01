@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/onereallylongname/avedit/internal/command"
-	"github.com/onereallylongname/avedit/internal/config"
-	"github.com/onereallylongname/avedit/internal/projection"
-	"github.com/onereallylongname/avedit/internal/schema"
-	"github.com/onereallylongname/avedit/internal/theme"
+	"github.com/onereallylongname/avredit/internal/command"
+	"github.com/onereallylongname/avredit/internal/config"
+	"github.com/onereallylongname/avredit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/theme"
 )
 
 // stripANSI removes ANSI escape sequences for test assertions.
@@ -1295,5 +1295,61 @@ func TestAction_ReplaceType_UndoRedo(t *testing.T) {
 	afterRedo := snapshotProj(t, proj)
 	if afterRedo != afterReplace {
 		t.Errorf("after redo should match post-replace\ngot:\n%s\nwant:\n%s", afterRedo, afterReplace)
+	}
+}
+
+// TestApp_RunSearch_DocPrefix is a regression test for a bug where the tree
+// search (runSearch) hardcoded every query into search.Filters{Name: query},
+// ignoring search.ParseQuery entirely. That meant prefix filters like "d:"
+// (doc), "t:" (type), "p:" (parent), "ns:" (namespace), and "a:" (alias) were
+// silently treated as name substrings and never matched anything real.
+func TestApp_RunSearch_DocPrefix(t *testing.T) {
+	projection.ResetNodeCounter()
+	raw := map[string]any{
+		"type":      "record",
+		"name":      "User",
+		"namespace": "com.example",
+		"fields": []any{
+			map[string]any{
+				"name": "id",
+				"type": "int",
+			},
+			map[string]any{
+				"name": "email",
+				"doc":  "the user's primary contact email address for test notifications",
+				"type": "string",
+			},
+		},
+	}
+	proj, err := projection.Build(raw)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	app := NewApp(proj, "test.avsc", config.DefaultConfig())
+	app.width = 120
+	app.height = 40
+	app.ready = true
+
+	app.searchBuf = []rune("d:test")
+	app.runSearch()
+
+	if len(app.searchResults) == 0 {
+		t.Fatal("expected d:test to match the doc field on the 'email' field, got no results")
+	}
+	found := false
+	for _, r := range app.searchResults {
+		if r.Node.Name() == "email" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected search results to include the 'email' field, got %+v", app.searchResults)
+	}
+
+	// Plain free-text search should still work as before (matches by name).
+	app.searchBuf = []rune("email")
+	app.runSearch()
+	if len(app.searchResults) == 0 {
+		t.Fatal("expected plain free-text search for 'email' to match the field by name")
 	}
 }

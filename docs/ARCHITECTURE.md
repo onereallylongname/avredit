@@ -1,8 +1,8 @@
-# avedit — Architecture Documentation
+# avredit — Architecture Documentation
 
 ## High-Level Overview
 
-avedit is a terminal-based Avro schema editor built with Go. It follows a **projection-command** architecture where the schema is parsed into a mutable tree (the projection), all edits happen through reversible command objects, and the UI reads the tree to render panels.
+avredit is a terminal-based Avro schema editor built with Go. It follows a **projection-command** architecture where the schema is parsed into a mutable tree (the projection), all edits happen through reversible command objects, and the UI reads the tree to render panels.
 
 ### Core Flow
 
@@ -47,7 +47,7 @@ avedit is a terminal-based Avro schema editor built with Go. It follows a **proj
 ```mermaid
 graph TB
     subgraph Entry["Entry Point"]
-        Main["cmd/avedit/main.go"]
+        Main["cmd/avredit/main.go"]
     end
 
     subgraph IO["I/O Layer"]
@@ -163,7 +163,7 @@ stateDiagram-v2
 
 ### Entry Point
 
-**`cmd/avedit/main.go`**
+**`cmd/avredit/main.go`**
 
 | Line | Function | Purpose |
 |------|----------|---------|
@@ -348,10 +348,10 @@ Each node kind gets a colored text badge: `R` (record), `F` (field), `E` (enum),
 
 | Line | Function | Purpose |
 |------|----------|---------|
-| 11-19 | `Filters` struct | Name, Type, Parent, Namespace, Alias, Text |
+| 11-19 | `Filters` struct | Name, Type, Parent, Namespace, Alias, Doc, Text |
 | 45-100 | `QueryNodes()` | Iterates all nodes, applies filters (AND logic), scores, sorts |
-| ~100 | `ParseQuery()` | Splits input into prefix filters (`n:`, `t:`, `p:`, `ns:`, `a:`) and free text |
-| ~150 | `scoreNode()` | Weighted scoring: name×3, type×2, text×1.5, alias×2.5 |
+| ~100 | `ParseQuery()` | Splits input into prefix filters (`n:`, `t:`, `p:`, `ns:`, `a:`, `d:`) and free text |
+| ~150 | `scoreNode()` | Weighted scoring: name×3, type×2, text×1.5, alias×2.5, doc×2 (doc uses substring `DocScore`, not fuzzy) |
 
 ### Theme System (`internal/theme/`)
 
@@ -364,7 +364,47 @@ Each node kind gets a colored text badge: `R` (record), `F` (field), `E` (enum),
 | 59-150 | `Build()` | Converts hex strings → `color.Color` → lipgloss styles |
 | 197-261 | `Registry` | Map of theme name → `*Theme`, loads from multiple dirs |
 
-**Discovery order:** `./themes/` → next to executable → `~/.config/avedit/themes/`
+**Discovery order:** `./themes/` → next to executable → `~/.config/avredit/themes/`
+
+### Schema Registry (`internal/registry/`)
+
+A stdlib-only (`net/http`) client for Confluent-compatible Schema Registry
+REST APIs. Deliberately **read-only plus compatibility-check**: no schema
+registration/push endpoint is implemented, matching the "no push, just save
+to disk" design decision.
+
+**`client.go`**
+
+| Function | Purpose |
+|----------|---------|
+| `NewClient(Config)` | Builds an `http.Client` with an `authTransport` RoundTripper and a request timeout (default 10s) |
+| `ListSubjects(ctx)` | `GET /subjects` |
+| `ListVersions(ctx, subject)` | `GET /subjects/{subject}/versions` |
+| `GetSchema(ctx, subject, version)` | `GET /subjects/{subject}/versions/{version\|latest}` |
+| `GetSchemaByID(ctx, id)` | `GET /schemas/ids/{id}` |
+| `CheckCompatibility(ctx, subject, version, schemaJSON)` | `POST /compatibility/subjects/{subject}/versions/{version\|latest}` |
+
+**`auth.go`** — `authTransport` wraps every request with Basic or Bearer
+credentials (`AuthType`: `AuthNone`/`AuthBasic`/`AuthBearer`). Credentials
+(`--token`/`--user`/`--password` CLI flags) are session-only and never
+persisted; only the registry URL is saved to `config.json`.
+
+**`internal/model/registry_integration.go`** wires the client into the TUI:
+
+- All registry HTTP calls run as `tea.Cmd`s (goroutines dispatching custom
+  `tea.Msg` types back into `App.Update`), since they're the first
+  network-dependent I/O in the codebase and must not block the UI.
+- `ExplorerModel` gained a `Files`/`Registry` mode (`Ctrl+G` toggles),
+  reusing its existing navigation/filter/render code — it never performs
+  I/O itself; `App` pushes fetched subjects/versions into it via setters.
+- `:registry check [subject]` compares the open schema against a subject's
+  latest version via `CheckCompatibility`, plus a best-effort **structural
+  (field-level) diff** (`structuralDiff`) — added/removed/type-changed
+  fields by name, not a raw text diff — surfaced through the flash bar and
+  `:notifications` log. This diffing is scoped only to `:registry check`,
+  not to fetch/overwrite.
+- Only Confluent Cloud / Confluent-API-compatible registries are targeted;
+  no mTLS.
 
 ### Configuration (`internal/config/`)
 
@@ -372,8 +412,8 @@ Each node kind gets a colored text badge: `R` (record), `F` (field), `E` (enum),
 
 | Line | Function | Purpose |
 |------|----------|---------|
-| 12-15 | `Config` struct | `Theme string`, `ThemesDir string` |
-| 26-35 | `Load()` | Reads `~/.config/avedit/config.json`, falls back to defaults |
+| 12-15 | `Config` struct | `Theme string`, `ThemesDir string`, `RegistryURL string` (URL only — credentials are never persisted, see Schema Registry section) |
+| 26-35 | `Load()` | Reads `~/.config/avredit/config.json`, falls back to defaults |
 | 60-73 | `Save()` | Writes config JSON to disk |
 | 76-80 | `SetTheme()` | Load + update + save convenience |
 
@@ -382,7 +422,7 @@ Each node kind gets a colored text badge: `R` (record), `F` (field), `E` (enum),
 | Line | Function | Purpose |
 |------|----------|---------|
 | 10-13 | `History` struct | `Commands []string`, `Searches []string` |
-| 24-32 | `LoadHistory()` | Reads `~/.config/avedit/history.json` |
+| 24-32 | `LoadHistory()` | Reads `~/.config/avredit/history.json` |
 | 35-50 | `SaveHistory()` | Trims to 100 entries, writes JSON |
 
 ---

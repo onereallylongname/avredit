@@ -3,7 +3,7 @@ package model
 import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/onereallylongname/avedit/internal/theme"
+	"github.com/onereallylongname/avredit/internal/theme"
 )
 
 // Confirm is a simple yes/no confirmation dialog.

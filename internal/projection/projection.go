@@ -3,7 +3,7 @@ package projection
 import (
 	"fmt"
 
-	"github.com/onereallylongname/avedit/internal/schema"
+	"github.com/onereallylongname/avredit/internal/schema"
 )
 
 // Projection is the internal tree representation of an Avro schema.

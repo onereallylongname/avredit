@@ -1,4 +1,4 @@
-// Package logging provides file-based structured logging for avedit.
+// Package logging provides file-based structured logging for avredit.
 //
 // Design:
 //   - Uses log/slog (stdlib) for structured, leveled logging
@@ -6,7 +6,7 @@
 //   - Log level configurable via config.json ("log_level") and CLI flag (--log-level)
 //   - Runtime level change via :log-level command or SetLevel()
 //   - Default level: ERROR (minimal noise for end users)
-//   - Log location: ~/.config/avedit/log/avedit.log
+//   - Log location: ~/.config/avredit/log/avredit.log
 //
 // Rotation policy:
 //   - Max file size: 10 MB (rotates when exceeded)
@@ -86,7 +86,7 @@ func Init(logDir string, level slog.Level) (cleanup func(), err error) {
 		return nil, err
 	}
 
-	logFile := filepath.Join(logDir, "avedit.log")
+	logFile := filepath.Join(logDir, "avredit.log")
 
 	writer := &lumberjack.Logger{
 		Filename:  logFile,
@@ -106,11 +106,11 @@ func Init(logDir string, level slog.Level) (cleanup func(), err error) {
 	return func() { writer.Close() }, nil
 }
 
-// LogDir returns the default log directory (~/.config/avedit/log/).
+// LogDir returns the default log directory (~/.config/avredit/log/).
 func LogDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(".", "log")
 	}
-	return filepath.Join(home, ".config", "avedit", "log")
+	return filepath.Join(home, ".config", "avredit", "log")
 }

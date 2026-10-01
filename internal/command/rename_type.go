@@ -3,7 +3,7 @@ package command
 import (
 	"fmt"
 
-	"github.com/onereallylongname/avedit/internal/projection"
+	"github.com/onereallylongname/avredit/internal/projection"
 )
 
 // RenameNamedTypeParams defines parameters for renaming a named type and propagating.
