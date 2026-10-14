@@ -52,6 +52,19 @@ func (e *Editor) InsertRune(ch rune) {
 	e.cursor++
 }
 
+// InsertText inserts a string (e.g. pasted clipboard text) at the cursor
+// position. Embedded newlines are preserved as literal '\n' runes, same as
+// a single InsertRune('\n'), so pasted multi-line text works in multiline
+// attributes (see RenderWrapped).
+func (e *Editor) InsertText(s string) {
+	if s == "" {
+		return
+	}
+	runes := []rune(s)
+	e.value = append(e.value[:e.cursor:e.cursor], append(runes, e.value[e.cursor:]...)...)
+	e.cursor += len(runes)
+}
+
 // SetWidth sets the visible width.
 func (e *Editor) SetWidth(w int) {
 	e.width = w

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/onereallylongname/avredit/internal/clipboard"
 	"github.com/onereallylongname/avredit/internal/projection"
 )
 
@@ -31,7 +32,7 @@ func ExportAvroToClipboard(proj *projection.Projection) (string, error) {
 
 	text := string(data)
 
-	if err := writeClipboard(text); err != nil {
+	if err := clipboard.WriteNative(text); err != nil {
 		return text, fmt.Errorf("clipboard write failed: %w", err)
 	}
 

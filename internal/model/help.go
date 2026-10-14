@@ -48,6 +48,7 @@ func Keybindings() []KeySection {
 				{"d", "Delete node"},
 				{"c", "Copy node"},
 				{"m", "Move field to record"},
+				{"yy", "Yank (copy) field name to clipboard"},
 				{"/", "Search"},
 			},
 		},
@@ -71,6 +72,9 @@ func Keybindings() []KeySection {
 				{"a", "Add custom attribute"},
 				{"d", "Delete attribute / list item"},
 				{"R", "Rename custom attr key"},
+				{"yp", "Yank (copy) attribute name"},
+				{"yy", "Yank (copy) attribute value"},
+				{"ya", "Yank (copy) \"name: value\""},
 				{"esc", "Return to tree pane"},
 			},
 		},
@@ -81,6 +85,7 @@ func Keybindings() []KeySection {
 				{"esc", "Cancel edit"},
 				{"shift+enter", "Newline (multiline fields; needs terminal support)"},
 				{"ctrl+j / alt+enter", "Newline (multiline fields; universal fallback)"},
+				{"ctrl+v / shift+insert", "Paste from clipboard"},
 			},
 		},
 		{
@@ -96,6 +101,7 @@ func Keybindings() []KeySection {
 				{"ns:foo", "Filter by namespace"},
 				{"a:foo", "Filter by alias"},
 				{"d:foo", "Filter by doc text"},
+				{"ctrl+v / shift+insert", "Paste from clipboard"},
 			},
 		},
 		{
@@ -111,6 +117,7 @@ func Keybindings() []KeySection {
 				{":theme <name>", "Switch theme"},
 				{":notifications", "Show notification log"},
 				{"tab", "Autocomplete command"},
+				{"ctrl+v / shift+insert", "Paste from clipboard"},
 			},
 		},
 		{
@@ -165,7 +172,9 @@ func HelpView(th *theme.Theme) string {
 
 func padRight(s string, width int) string {
 	if len(s) >= width {
-		return s
+		// Still guarantee a separating space so the description doesn't run
+		// into a key that exceeds the padding width.
+		return s + " "
 	}
 	return s + strings.Repeat(" ", width-len(s))
 }

@@ -116,6 +116,7 @@ Once inside:
 | `d`      | Delete node          |
 | `c`      | Copy node            |
 | `m`      | Move to record       |
+| `yy`     | Yank (copy) field name |
 | `u`      | Undo                 |
 | `Ctrl+R` | Redo                 |
 | `/`      | Search               |
@@ -141,23 +142,28 @@ Once inside:
 | `a`         | Add custom attribute   |
 | `d`         | Delete attribute       |
 | `R`         | Rename custom attr key |
+| `yp`        | Yank (copy) attribute name |
+| `yy`        | Yank (copy) attribute value |
+| `ya`        | Yank (copy) "name: value"  |
 
 ### Edit Mode
 
-| Key           | Action                     |
-| ------------- | -------------------------- |
-| `Enter`       | Confirm edit               |
-| `Esc`         | Cancel edit                |
-| `Shift+Enter` | Newline (multiline fields) |
+| Key                      | Action                     |
+| ------------------------ | -------------------------- |
+| `Enter`                  | Confirm edit               |
+| `Esc`                    | Cancel edit                |
+| `Shift+Enter`            | Newline (multiline fields) |
+| `Ctrl+V` / `Shift+Insert`| Paste from clipboard       |
 
 ### Search Mode
 
-| Key     | Action          |
-| ------- | --------------- |
-| `/`     | Open search     |
-| `Enter` | Jump to match   |
-| `n`/`N` | Next/prev match |
-| `Esc`   | Close search    |
+| Key                       | Action          |
+| ------------------------- | --------------- |
+| `/`                       | Open search     |
+| `Enter`                   | Jump to match   |
+| `n`/`N`                   | Next/prev match |
+| `Esc`                     | Close search    |
+| `Ctrl+V` / `Shift+Insert` | Paste from clipboard |
 
 ### Search Prefixes
 
@@ -189,6 +195,26 @@ Once inside:
 | `:notifications`   | Show notification history        |
 | `:registry check [subject]` | Compatibility check against the registry (see below) |
 | `:registry report` | Reopen the last compatibility check report |
+
+### Clipboard (Yank & Paste)
+
+avredit uses vim-style yank keybindings to copy data to the system clipboard,
+and supports pasting into any text input:
+
+| Key                       | Where         | Action                                |
+| ------------------------- | -------------- | -------------------------------------- |
+| `yy`                      | Tree pane      | Yank the selected field/record's name   |
+| `yp`                      | Details pane   | Yank the current attribute's name       |
+| `yy`                      | Details pane   | Yank the current attribute's value      |
+| `ya`                      | Details pane   | Yank `"name: value"`                    |
+| `Ctrl+V` / `Shift+Insert` | Any text input | Paste from clipboard                    |
+
+Yanks write to the clipboard two ways at once — OSC52 (via the terminal
+itself, works over SSH with no extra tools) and a native tool (`pbcopy`,
+`xclip`/`xsel`/`wl-copy`, or `clip`) — so whichever one your terminal/session
+supports will land. Pastes first try the terminal's bracketed-paste (no
+tools needed); `Ctrl+V`/`Shift+Insert` fall back to reading the native
+clipboard directly for terminals that don't deliver bracketed-paste.
 
 ## Schema Registry
 

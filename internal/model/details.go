@@ -172,6 +172,14 @@ func (d *DetailsModel) InsertNewline() {
 	}
 }
 
+// PasteText inserts s at the cursor of the active inline editor (used for
+// both value edits and custom-attribute-key rename edits).
+func (d *DetailsModel) PasteText(s string) {
+	if d.editing {
+		d.editor.InsertText(s)
+	}
+}
+
 // IsCustomAttr returns true if the cursor is on a custom (non-standard) attribute.
 func (d *DetailsModel) IsCustomAttr() bool {
 	return d.cursor >= d.customStartIdx && d.customStartIdx < len(d.attrs)

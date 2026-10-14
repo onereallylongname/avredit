@@ -27,6 +27,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/onereallylongname/avredit/internal/clipboard"
 	"github.com/onereallylongname/avredit/internal/command"
 	"github.com/onereallylongname/avredit/internal/config"
 	"github.com/onereallylongname/avredit/internal/io"
@@ -133,6 +134,12 @@ type App struct {
 	width  int
 	height int
 	ready  bool
+
+	// pendingKey holds a leading key of a two-key vim-style sequence
+	// (currently just "y" for yank) awaiting its second key. Resolved (and
+	// cleared) on the very next keypress in Normal mode, regardless of
+	// what that key is — see handleYankKey.
+	pendingKey rune
 
 	// Overlays
 	overlay       Overlay
@@ -334,6 +341,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.updateLayout()
 		return a, nil
 
+	case tea.PasteMsg:
+		// Bracketed-paste text from the terminal (Shift+Insert, right-click
+		// paste, etc.) — route it into whichever editable input is active.
+		// A no-op everywhere else.
+		a.pasteText(msg.Content)
+		return a, nil
+
 	case tea.KeyPressMsg:
 		// Clear flash on any key
 		a.flash = ""
@@ -497,6 +511,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateCommand(msg)
 		}
 
+		// Resolve a pending two-key sequence ("y" + motion) before
+		// dispatching to the panel. Any key after "y" is consumed here,
+		// including a mismatched one (which just cancels the sequence).
+		if a.mode == ModeNormal && a.pendingKey != 0 {
+			pending := a.pendingKey
+			a.pendingKey = 0
+			return a.handleYankKey(pending, msg.String())
+		}
+
 		// Delegate to panel-specific handler (each handles its own modes)
 		switch a.focus {
 		case PanelTree:
@@ -598,6 +621,8 @@ func (a App) updateSearch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.searchCursor = 0
 	case "end", "ctrl+e":
 		a.searchCursor = len(a.searchBuf)
+	case "ctrl+v", "shift+insert":
+		return a.pasteFromNativeClipboard()
 	case "backspace":
 		if a.searchCursor > 0 {
 			a.searchBuf = append(a.searchBuf[:a.searchCursor-1], a.searchBuf[a.searchCursor:]...)
@@ -718,6 +743,8 @@ func (a App) updateCommand(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.cmdCursor = 0
 	case "end", "ctrl+e":
 		a.cmdCursor = len(a.cmdBuf)
+	case "ctrl+v", "shift+insert":
+		return a.pasteFromNativeClipboard()
 	case "backspace":
 		if a.cmdCursor > 0 {
 			a.cmdBuf = append(a.cmdBuf[:a.cmdCursor-1], a.cmdBuf[a.cmdCursor:]...)
@@ -1031,6 +1058,9 @@ func (a App) updateTree(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return a.actionCopy()
 		case "m":
 			return a.actionMove()
+		case "y":
+			a.pendingKey = 'y'
+			return a, nil
 
 		// Enter focuses the details pane
 		case "enter":
@@ -1119,6 +1149,9 @@ func (a App) updateDetails(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return a, nil
+		case "y":
+			a.pendingKey = 'y'
+			return a, nil
 		default:
 			a.details.HandleKey(msg)
 		}
@@ -1140,6 +1173,8 @@ func (a App) updateDetails(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					a.details.InsertNewline()
 				}
 				return a, nil
+			case "ctrl+v", "shift+insert":
+				return a.pasteFromNativeClipboard()
 			case "esc":
 				a.details.CancelEdit()
 				a.mode = ModeNormal
@@ -1550,6 +1585,112 @@ func (a App) actionCopy() (tea.Model, tea.Cmd) {
 	a.tree.rebuildLines()
 	a.syncDetailsToTree()
 	return a, nil
+}
+
+// handleYankKey resolves a pending "y" + motion sequence. Behavior depends
+// on which panel is focused: in the tree pane "yy" yanks the selected
+// node's name; in the details pane "yp"/"yy"/"ya" yank the current
+// attribute's name/value/"name: value". Any other combination (including
+// "y" pressed in the explorer) is a silent no-op, matching vim's handling
+// of an unrecognized operator+motion.
+func (a App) handleYankKey(pending rune, key string) (tea.Model, tea.Cmd) {
+	if pending != 'y' {
+		return a, nil
+	}
+	switch a.focus {
+	case PanelTree:
+		if key != "y" {
+			return a, nil
+		}
+		node := a.tree.SelectedNode()
+		if node == nil {
+			return a, nil
+		}
+		return a.yank(node.Name(), "field name")
+	case PanelDetails:
+		attr := a.details.CursorAttr()
+		if attr == nil {
+			return a, nil
+		}
+		switch key {
+		case "p":
+			return a.yank(attr.Key, "property name")
+		case "y":
+			return a.yank(attr.Value, "property value")
+		case "a":
+			return a.yank(attr.Key+": "+attr.Value, "property")
+		}
+	}
+	return a, nil
+}
+
+// yank copies text to the clipboard (OSC52 + native tool, see
+// copyToClipboard) and flashes a status message naming what was copied.
+func (a App) yank(text, label string) (tea.Model, tea.Cmd) {
+	if text == "" {
+		a.flashError("nothing to yank: " + label + " is empty")
+		return a, nil
+	}
+	a.flashInfo("yanked " + label)
+	return a, copyToClipboard(text)
+}
+
+// copyToClipboard writes text to the clipboard using both OSC52 (via the
+// terminal itself, works over SSH with no subprocess) and a best-effort
+// native tool. Either landing is a win and there's no real cost when one
+// doesn't, so both are always attempted.
+func copyToClipboard(text string) tea.Cmd {
+	return tea.Batch(
+		tea.SetClipboard(text),
+		func() tea.Msg {
+			_ = clipboard.WriteNative(text)
+			return nil
+		},
+	)
+}
+
+// pasteFromNativeClipboard is the explicit "paste" fallback (ctrl+v or
+// shift+insert) for terminals/sessions where bracketed-paste doesn't reach
+// the app (e.g. no tea.PasteMsg fires). Silently no-ops if no native
+// clipboard tool is available — this is a best-effort convenience, not the
+// primary path (tea.PasteMsg is).
+func (a App) pasteFromNativeClipboard() (tea.Model, tea.Cmd) {
+	text, err := clipboard.ReadNative()
+	if err != nil {
+		return a, nil
+	}
+	a.pasteText(text)
+	return a, nil
+}
+
+// pasteText inserts s into whichever text input is currently active: the
+// details-pane inline editor, the search bar, or the command bar. A no-op
+// elsewhere (e.g. normal-mode navigation).
+func (a *App) pasteText(s string) {
+	if s == "" {
+		return
+	}
+	switch {
+	case a.mode == ModeEdit && a.details.Editing():
+		a.details.PasteText(s)
+	case a.mode == ModeSearch:
+		a.searchBuf, a.searchCursor = insertRunesAt(a.searchBuf, a.searchCursor, s)
+		a.runSearch()
+	case a.mode == ModeCommand:
+		a.cmdBuf, a.cmdCursor = insertRunesAt(a.cmdBuf, a.cmdCursor, s)
+	}
+}
+
+// insertRunesAt inserts text into buf at the given rune cursor position,
+// returning the updated buffer and the cursor position after the inserted
+// text.
+func insertRunesAt(buf []rune, cursor int, text string) ([]rune, int) {
+	runes := []rune(text)
+	out := make([]rune, 0, len(buf)+len(runes))
+	out = append(out, buf[:cursor]...)
+	out = append(out, runes...)
+	out = append(out, buf[cursor:]...)
+	return out, cursor + len(runes)
 }
 
 // actionMove opens a picker to choose a target record for moving the selected field.
