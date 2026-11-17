@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/onereallylongname/avredit/internal/search"
 	"github.com/onereallylongname/avredit/internal/theme"
 )
 
@@ -642,7 +643,11 @@ func (e *ExplorerModel) filterRegistry(query string) {
 		return
 	}
 	for i, entry := range e.entries {
-		if strings.Contains(strings.ToLower(entry.Name), e.filterQuery) {
+		name := entry.Name
+		if entry.RegSubject != "" {
+			name = entry.RegSubject
+		}
+		if search.Fuzzy(name, e.filterQuery) {
 			e.matchIndices = append(e.matchIndices, i)
 		}
 	}
@@ -681,7 +686,7 @@ func (e *ExplorerModel) filterFiles(query string) {
 				return nil
 			}
 		}
-		if strings.Contains(strings.ToLower(name), e.filterQuery) {
+		if search.Fuzzy(name, e.filterQuery) {
 			// Mark all ancestor directories for expansion
 			p := filepath.Dir(path)
 			for {
@@ -707,7 +712,7 @@ func (e *ExplorerModel) filterFiles(query string) {
 	if len(dirsToExpand) == 0 && e.filterQuery != "" {
 		// No matches found — still rebuild match indices from current entries
 		for i, entry := range e.entries {
-			if strings.Contains(strings.ToLower(entry.Name), e.filterQuery) {
+			if search.Fuzzy(entry.Name, e.filterQuery) {
 				e.matchIndices = append(e.matchIndices, i)
 			}
 		}
@@ -737,7 +742,7 @@ func (e *ExplorerModel) filterFiles(query string) {
 
 	// Build match indices for entries whose name matches the query
 	for i, entry := range e.entries {
-		if strings.Contains(strings.ToLower(entry.Name), e.filterQuery) {
+		if search.Fuzzy(entry.Name, e.filterQuery) {
 			e.matchIndices = append(e.matchIndices, i)
 		}
 	}
@@ -755,7 +760,11 @@ func (e *ExplorerModel) reapplyFilter() {
 	e.matchIndices = nil
 	e.matchIdx = 0
 	for i, entry := range e.entries {
-		if strings.Contains(strings.ToLower(entry.Name), e.filterQuery) {
+		name := entry.Name
+		if entry.RegSubject != "" {
+			name = entry.RegSubject
+		}
+		if search.Fuzzy(name, e.filterQuery) {
 			e.matchIndices = append(e.matchIndices, i)
 		}
 	}

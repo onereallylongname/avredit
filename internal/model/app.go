@@ -1064,6 +1064,9 @@ func (a App) updateTree(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		// Enter focuses the details pane
 		case "enter":
+			if a.jumpToNamedDefinition(a.tree.SelectedNode()) {
+				return a, nil
+			}
 			a.focus = PanelDetails
 			return a, nil
 
@@ -1137,6 +1140,9 @@ func (a App) updateDetails(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			a.focus = PanelTree
 			return a, nil
 		case "enter", "e":
+			if msg.String() == "enter" && a.jumpToNamedDefinition(a.tree.SelectedNode()) {
+				return a, nil
+			}
 			return a.beginDetailEdit()
 		case "a":
 			return a.actionAddCustomAttr()
@@ -2041,6 +2047,96 @@ func (a *App) syncDetailsToTree() {
 	if sel := a.tree.SelectedNode(); sel != nil {
 		a.details.SetNode(sel)
 	}
+}
+
+func (a *App) jumpToNamedDefinition(ref *projection.Node) bool {
+	if ref == nil || ref.Kind != schema.KindNamed {
+		return false
+	}
+
+	definition := a.resolveNamedDefinition(ref)
+	if definition == nil {
+		a.flashError("Named type definition not found: "+ref.NativeString(), "node", ref.ID)
+		return true
+	}
+	a.tree.JumpToNode(definition.ID)
+	a.syncDetailsToTree()
+	return true
+}
+
+func (a *App) resolveNamedDefinition(ref *projection.Node) *projection.Node {
+	refName := ref.NativeString()
+	if refName == "" {
+		return nil
+	}
+
+	namespace := effectiveNamespace(a.proj, a.proj.Get(ref.ParentID))
+	targetName := refName
+	if !strings.Contains(refName, ".") && namespace != "" {
+		targetName = namespace + "." + refName
+	}
+
+	var match *projection.Node
+	for _, node := range a.proj.Nodes {
+		if node.Kind != schema.KindRecord && node.Kind != schema.KindEnum && node.Kind != schema.KindFixed {
+			continue
+		}
+		if namedTypeMatches(a.proj, node, targetName) {
+			if match != nil {
+				return nil
+			}
+			match = node
+		}
+	}
+	return match
+}
+
+func namedTypeMatches(proj *projection.Projection, node *projection.Node, targetName string) bool {
+	name := node.Name()
+	if strings.Contains(name, ".") {
+		if name == targetName {
+			return true
+		}
+	} else {
+		namespace := node.Namespace()
+		if namespace == "" {
+			namespace = effectiveNamespace(proj, proj.Get(node.ParentID))
+		}
+		fullName := name
+		if namespace != "" {
+			fullName = namespace + "." + name
+		}
+		if fullName == targetName {
+			return true
+		}
+	}
+
+	namespace := node.Namespace()
+	if namespace == "" {
+		namespace = effectiveNamespace(proj, proj.Get(node.ParentID))
+	}
+	for _, alias := range node.Aliases() {
+		fullAlias := alias
+		if !strings.Contains(alias, ".") && namespace != "" {
+			fullAlias = namespace + "." + alias
+		}
+		if fullAlias == targetName {
+			return true
+		}
+	}
+	return false
+}
+
+func effectiveNamespace(proj *projection.Projection, node *projection.Node) string {
+	for current := node; current != nil; current = proj.Get(current.ParentID) {
+		if name := current.Name(); strings.Contains(name, ".") {
+			return name[:strings.LastIndex(name, ".")]
+		}
+		if namespace := current.Namespace(); namespace != "" {
+			return namespace
+		}
+	}
+	return ""
 }
 
 // updateLayout recalculates panel sizes based on terminal dimensions.

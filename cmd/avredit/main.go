@@ -20,7 +20,7 @@ import (
 
 // Version is set at build time via ldflags (e.g.
 // -ldflags "-X main.Version=1.2.3"); defaults to this value otherwise.
-var Version = "0.2.1"
+var Version = "0.2.2"
 
 func main() {
 	// Parse flags manually (consistent with existing style)
