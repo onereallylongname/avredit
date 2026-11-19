@@ -102,6 +102,16 @@ Once inside:
 | `Ctrl+G`    | Switch explorer between Files and Schema Registry |
 | `Esc`       | Cancel / exit mode   |
 | `Ctrl+S`    | Save                 |
+| `Ctrl+P`    | Open command line (same as `:`) |
+
+### Mouse
+
+| Action | Effect |
+| ------ | ------ |
+| Scroll wheel | Move the selection in the panel under the pointer |
+| Left click | Focus the panel and select the row; clicking the selected row toggles expand/open |
+| Double click | Expand the node / open the file |
+| Right click | Context menu (add, delete, copy, move, undo, command line, search, help, save) |
 
 ### Tree (Normal Mode)
 
@@ -169,13 +179,15 @@ Once inside:
 
 | Prefix | Filters by             | Example          |
 | ------ | ---------------------- | ---------------- |
-| `n:`   | Field/record name      | `n:order`        |
+| `n:`   | Field/record name (also matches fields referencing a named type) | `n:order`        |
 | `t:`   | Type                   | `t:record`       |
 | `p:`   | Parent name            | `p:Customer`     |
 | `ns:`  | Namespace              | `ns:com.payment` |
 | `a:`   | Alias                  | `a:OrderEvent`   |
 | `d:`   | Doc text               | `d:deprecated`   |
 | (none) | Free text (all fields, including doc) | `timestamp` |
+
+Combine filters with a space (AND) and alternatives with `|` (OR), e.g. `n:event t:string | d:deprecated`.
 
 ### Command Mode
 
@@ -193,6 +205,8 @@ Once inside:
 | `:diagnostics`     | Alias for `:problems`            |
 | `:log-level [lvl]` | Set log level (picker if no arg) |
 | `:notifications`   | Show notification history        |
+| `:help`            | Show the keybindings help        |
+| `:options`         | Show the right-click menu        |
 | `:registry check [subject]` | Compatibility check against the registry (see below) |
 | `:registry report` | Reopen the last compatibility check report |
 

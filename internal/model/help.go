@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/onereallylongname/avredit/internal/theme"
 )
 
@@ -107,7 +108,7 @@ func Keybindings() []KeySection {
 		{
 			Title: "Command",
 			Bindings: []KeyBinding{
-				{":", "Open command line"},
+				{":/Ctrl+P", "Open command line"},
 				{"↑/↓", "Command history"},
 				{":w [file]", "Save (optionally to file)"},
 				{":q", "Quit (confirms if unsaved)"},
@@ -116,6 +117,8 @@ func Keybindings() []KeySection {
 				{":export [file]", "Export .avsc"},
 				{":theme <name>", "Switch theme"},
 				{":notifications", "Show notification log"},
+				{":help", "Show help"},
+				{":options", "Show the right-click menu"},
 				{"tab", "Autocomplete command"},
 				{"ctrl+v / shift+insert", "Paste from clipboard"},
 			},
@@ -147,8 +150,12 @@ func KeybindingsText() string {
 	return sb.String()
 }
 
-// HelpView renders a styled help overlay for the TUI.
-func HelpView(th *theme.Theme) string {
+// helpKeyWidth is the column width reserved for key names in the help view.
+const helpKeyWidth = 14
+
+// HelpView renders a styled help overlay for the TUI, wrapping descriptions
+// so no line is wider than width.
+func HelpView(th *theme.Theme, width int) string {
 	titleStyle := lipgloss.NewStyle().Foreground(th.Primary).Bold(true)
 	keyStyle := lipgloss.NewStyle().Foreground(th.Warning).Bold(true)
 	descStyle := lipgloss.NewStyle().Foreground(th.Fg)
@@ -162,7 +169,15 @@ func HelpView(th *theme.Theme) string {
 		sb.WriteString(dimStyle.Render("  ─ " + sec.Title + " ─"))
 		sb.WriteString("\n")
 		for _, b := range sec.Bindings {
-			sb.WriteString("  " + keyStyle.Render(padRight(b.Key, 14)) + descStyle.Render(b.Desc) + "\n")
+			descW := width - 2 - helpKeyWidth - 1
+			if descW < 10 {
+				descW = 10
+			}
+			descLines := strings.Split(ansi.Wrap(b.Desc, descW, ""), "\n")
+			sb.WriteString("  " + keyStyle.Render(padRight(b.Key, helpKeyWidth)) + descStyle.Render(descLines[0]) + "\n")
+			for _, extra := range descLines[1:] {
+				sb.WriteString(strings.Repeat(" ", 2+helpKeyWidth+1) + descStyle.Render(extra) + "\n")
+			}
 		}
 		sb.WriteString("\n")
 	}

@@ -1,7 +1,8 @@
 // Package search implements the query engine for finding nodes in a projection.
 //
 // Supports prefix filters (n:name, t:type, p:parent, ns:namespace, a:alias, d:doc)
-// and free-text fuzzy matching. All active filters use AND logic.
+// and free-text fuzzy matching. Filters within a group use AND logic; groups
+// separated by "|" use OR logic.
 // Results are scored by weighted relevance and sorted descending.
 //
 // See docs/ARCHITECTURE.md "Search Engine" for scoring weights.
@@ -93,30 +94,77 @@ func QueryNodes(proj *projection.Projection, filters Filters) []Result {
 	return filtered
 }
 
-// ParseQuery parses a search string into structured filters.
-// Supports prefixes: "n:", "t:", "p:", "ns:", "a:", "d:"
+// ParseQuery parses a single AND group of filters, e.g. "n:order t:record".
+// Supports prefixes: "n:", "t:", "p:", "ns:", "a:", "d:". Text before the first
+// prefix is free text; a prefix value extends until the next prefix.
 func ParseQuery(input string) Filters {
-	input = strings.TrimSpace(input)
-	if input == "" {
-		return Filters{}
+	var f Filters
+	var key string
+	values := map[string][]string{}
+
+	for _, word := range strings.Fields(input) {
+		if k, rest, ok := splitPrefix(word); ok {
+			key = k
+			if rest != "" {
+				values[key] = append(values[key], rest)
+			}
+			continue
+		}
+		values[key] = append(values[key], word)
 	}
 
-	switch {
-	case strings.HasPrefix(input, "n:"):
-		return Filters{Name: strings.TrimSpace(input[2:])}
-	case strings.HasPrefix(input, "t:"):
-		return Filters{Type: strings.TrimSpace(input[2:])}
-	case strings.HasPrefix(input, "p:"):
-		return Filters{Parent: strings.TrimSpace(input[2:])}
-	case strings.HasPrefix(input, "ns:"):
-		return Filters{Namespace: strings.TrimSpace(input[3:])}
-	case strings.HasPrefix(input, "a:"):
-		return Filters{Alias: strings.TrimSpace(input[2:])}
-	case strings.HasPrefix(input, "d:"):
-		return Filters{Doc: strings.TrimSpace(input[2:])}
-	default:
-		return Filters{Text: input}
+	f.Text = strings.Join(values[""], " ")
+	f.Name = strings.Join(values["n"], " ")
+	f.Type = strings.Join(values["t"], " ")
+	f.Parent = strings.Join(values["p"], " ")
+	f.Namespace = strings.Join(values["ns"], " ")
+	f.Alias = strings.Join(values["a"], " ")
+	f.Doc = strings.Join(values["d"], " ")
+	return f
+}
+
+// ParseExpr parses a query where "|" separates OR alternatives, each of which
+// is an AND group understood by ParseQuery. Empty groups are dropped.
+func ParseExpr(input string) []Filters {
+	var groups []Filters
+	for _, part := range strings.Split(input, "|") {
+		if f := ParseQuery(part); !f.IsEmpty() {
+			groups = append(groups, f)
+		}
 	}
+	return groups
+}
+
+// QueryExpr runs each OR group and merges the results, keeping the best score per node.
+func QueryExpr(proj *projection.Projection, groups []Filters) []Result {
+	best := map[string]Result{}
+	for _, g := range groups {
+		for _, r := range QueryNodes(proj, g) {
+			if cur, ok := best[r.NodeID]; !ok || r.Score > cur.Score {
+				best[r.NodeID] = r
+			}
+		}
+	}
+	results := make([]Result, 0, len(best))
+	for _, r := range best {
+		results = append(results, r)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Score != results[j].Score {
+			return results[i].Score > results[j].Score
+		}
+		return results[i].NodeID < results[j].NodeID
+	})
+	return results
+}
+
+func splitPrefix(word string) (key, rest string, ok bool) {
+	for _, k := range []string{"ns", "n", "t", "p", "a", "d"} {
+		if strings.HasPrefix(word, k+":") {
+			return k, word[len(k)+1:], true
+		}
+	}
+	return "", "", false
 }
 
 type activeFilter struct {
@@ -164,6 +212,9 @@ func scoreNode(proj *projection.Projection, node *projection.Node, _ Filters, ac
 				FuzzyScore(props.parent, af.value),
 				FuzzyScore(props.namespace, af.value),
 			)
+			if refScore := FuzzyScore(props.namedRef, af.value) * 2.5; refScore > best {
+				best = refScore
+			}
 			if aliasScore := FuzzyScore(props.aliases, af.value) * 2.5; aliasScore > best {
 				best = aliasScore
 			}
@@ -182,6 +233,9 @@ func scoreNode(proj *projection.Projection, node *projection.Node, _ Filters, ac
 			}
 		case "name":
 			score := FuzzyScore(props.name, af.value)
+			if ref := FuzzyScore(props.namedRef, af.value) * 0.9; ref > score {
+				score = ref
+			}
 			if score > 0 {
 				total += score * 3
 				matched++
@@ -222,6 +276,7 @@ func scoreNode(proj *projection.Projection, node *projection.Node, _ Filters, ac
 
 type searchProps struct {
 	name      string
+	namedRef  string // referenced named type of a field, e.g. "Money"
 	typeName  string
 	parent    string
 	namespace string
@@ -235,6 +290,7 @@ func getSearchableProps(proj *projection.Projection, node *projection.Node) sear
 	props.name = node.Name()
 	props.namespace = node.Namespace()
 	props.typeName = getNodeTypeLabel(proj, node)
+	props.namedRef = namedTypeRef(proj, node)
 	props.parent = getParentRecordName(proj, node)
 	props.doc = node.Doc()
 	if al := node.Aliases(); len(al) > 0 {
@@ -282,6 +338,17 @@ func getNodeTypeLabel(proj *projection.Projection, node *projection.Node) string
 	default:
 		return string(node.Kind)
 	}
+}
+
+// namedTypeRef returns the named type a field references directly, if any.
+func namedTypeRef(proj *projection.Projection, node *projection.Node) string {
+	if node.Kind != schema.KindField || len(node.Children) == 0 {
+		return ""
+	}
+	if child := proj.Get(node.Children[0]); child != nil && child.Kind == schema.KindNamed {
+		return child.NativeString()
+	}
+	return ""
 }
 
 func getParentRecordName(proj *projection.Projection, node *projection.Node) string {

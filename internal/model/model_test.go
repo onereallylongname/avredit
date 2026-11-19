@@ -1353,3 +1353,38 @@ func TestApp_RunSearch_DocPrefix(t *testing.T) {
 		t.Fatal("expected plain free-text search for 'email' to match the field by name")
 	}
 }
+
+func TestApp_Search_FreshAndPanelIndependent(t *testing.T) {
+	projection.ResetNodeCounter()
+	proj, err := projection.Build(map[string]any{
+		"type": "record", "name": "User",
+		"fields": []any{map[string]any{"name": "email", "type": "string"}},
+	})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	app := NewApp(proj, "test.avsc", config.DefaultConfig())
+	app.width, app.height, app.ready = 120, 40, true
+
+	app.searchExplorer = false
+	app.searchBuf = []rune("email")
+	app.runSearch()
+	if len(app.matchedIDs) == 0 {
+		t.Fatal("expected tree matches")
+	}
+
+	// Searching the explorer must not wipe the tree matches.
+	app.searchExplorer = true
+	app.searchBuf = []rune("zzz")
+	app.runSearch()
+	if len(app.matchedIDs) == 0 {
+		t.Error("explorer search cleared tree matches")
+	}
+
+	// Reopening search starts with an empty buffer.
+	app.mode = ModeNormal
+	m, _ := app.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	if got := len(m.(App).searchBuf); got != 0 {
+		t.Errorf("search buffer should be empty on open, got %d runes", got)
+	}
+}

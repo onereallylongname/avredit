@@ -464,6 +464,18 @@ func (e *ExplorerModel) adjustScroll() {
 	}
 }
 
+// moveCursor moves the cursor by delta rows (clamped) and keeps it visible.
+func (e *ExplorerModel) moveCursor(delta int) {
+	e.cursor += delta
+	if e.cursor >= len(e.entries) {
+		e.cursor = len(e.entries) - 1
+	}
+	if e.cursor < 0 {
+		e.cursor = 0
+	}
+	e.adjustScroll()
+}
+
 // rebuild regenerates the flat entry list from the active mode's data
 // source (disk or cached registry data).
 func (e *ExplorerModel) rebuild() {

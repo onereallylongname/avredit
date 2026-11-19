@@ -235,3 +235,57 @@ func TestQueryNodes_Empty(t *testing.T) {
 		t.Errorf("empty filter should return no results, got %d", len(results))
 	}
 }
+
+// --- ParseExpr / QueryExpr Tests ---
+
+func TestParseQuery_MultipleFilters(t *testing.T) {
+	got := search.ParseQuery("n: user t:string d:aws region")
+	want := search.Filters{Name: "user", Type: "string", Doc: "aws region"}
+	if got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestParseExpr_Or(t *testing.T) {
+	got := search.ParseExpr("n: event | t: long |  ")
+	want := []search.Filters{{Name: "event"}, {Type: "long"}}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestQueryExpr_OrUnion(t *testing.T) {
+	proj := mustBuild(t, searchTestSchema)
+	names := map[string]bool{}
+	for _, r := range search.QueryExpr(proj, search.ParseExpr("n:eventId | n:region")) {
+		names[r.Node.Name()] = true
+	}
+	if !names["eventId"] || !names["region"] {
+		t.Errorf("expected eventId and region in results, got %v", names)
+	}
+}
+
+func TestQueryExpr_AndAcrossFilters(t *testing.T) {
+	proj := mustBuild(t, searchTestSchema)
+	results := search.QueryExpr(proj, search.ParseExpr("n:event t:string"))
+	if len(results) != 1 || results[0].Node.Name() != "eventId" {
+		t.Errorf("expected only eventId, got %d results", len(results))
+	}
+}
+
+func TestQueryNodes_NameMatchesNamedTypeReference(t *testing.T) {
+	proj := mustBuild(t, `{
+		"type": "record", "name": "Order",
+		"fields": [
+			{"name": "price", "type": {"type": "record", "name": "Money", "fields": [{"name": "cents", "type": "long"}]}},
+			{"name": "refund", "type": "Money"}
+		]
+	}`)
+	names := map[string]bool{}
+	for _, r := range search.QueryNodes(proj, search.Filters{Name: "Money"}) {
+		names[r.Node.Name()] = true
+	}
+	if !names["Money"] || !names["refund"] {
+		t.Errorf("expected Money record and refund field, got %v", names)
+	}
+}

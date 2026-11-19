@@ -295,3 +295,13 @@ func TestRegistryCheckReport_PlainText_IncludesVerboseReasonsNextToDiff(t *testi
 		t.Errorf("expected the verbose reason to appear directly after its diff line, got:\n%s", text)
 	}
 }
+
+func TestMatchCandidates_PrefixThenFuzzy(t *testing.T) {
+	if got := matchCandidates(knownCommands, "no"); len(got) != 2 {
+		t.Errorf("prefix matches = %v, want notifications and notify", got)
+	}
+	got := matchCandidates(knownCommands, "dgn")
+	if len(got) != 1 || got[0] != "diagnostics" {
+		t.Errorf("fuzzy matches = %v, want [diagnostics]", got)
+	}
+}

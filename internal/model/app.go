@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"image/color"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -103,6 +104,7 @@ const (
 	ActionSetLogLevel OverlayAction = iota
 	ActionShowProblems OverlayAction = iota
 	ActionLoadRegistry OverlayAction = iota
+	ActionContextMenu  OverlayAction = iota
 )
 
 // FlashLevel determines the visual style of a flash message.
@@ -166,6 +168,9 @@ type App struct {
 	// Tab-completion cycling state for the command bar (":registry check
 	// <subject>" etc). Reset to inactive on any edit other than repeated
 	// "tab" presses, so a fresh Tab always recomputes matches.
+	lastClick          mouseClick
+	contextMenu        []contextMenuItem
+	themeBeforePreview *theme.Theme // theme active before the picker started previewing
 	cmdCompletions    []string // full candidate list for the current word, in cycle order
 	cmdCompletionIdx  int      // index into cmdCompletions currently applied to cmdBuf
 	cmdCompletionPrefix string // buffer text before the word being completed (kept stable across cycles)
@@ -341,6 +346,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.updateLayout()
 		return a, nil
 
+	case tea.MouseClickMsg, tea.MouseWheelMsg:
+		return a.updateMouse(msg)
+
 	case tea.PasteMsg:
 		// Bracketed-paste text from the terminal (Shift+Insert, right-click
 		// paste, etc.) — route it into whichever editable input is active.
@@ -370,9 +378,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.mode == ModeSearch {
 				a.searchBuf = nil
 				a.searchCursor = 0
-				a.searchResults = nil
-				a.searchIdx = 0
-				a.matchedIDs = nil
+				a.runSearch()
 				a.mode = ModeNormal
 				return a, nil
 			}
@@ -419,7 +425,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.overlay = OverlayHelp
 				return a, nil
 			}
-		case ":":
+		case ":", "ctrl+p":
 			if a.mode == ModeNormal {
 				a.mode = ModeCommand
 				a.cmdHistIdx = -1
@@ -429,6 +435,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.mode == ModeNormal {
 				a.searchExplorer = (a.focus == PanelExplorer)
 				a.searchHistIdx = -1
+				a.searchBuf = nil
+				a.searchCursor = 0
 				a.mode = ModeSearch
 				return a, nil
 			}
@@ -478,10 +486,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "n":
 			if a.mode == ModeNormal {
-				if a.searchExplorer && a.explorer.FilteredCount() > 0 {
+				if a.focus == PanelExplorer && a.explorer.FilteredCount() > 0 {
 					a.explorer.NextMatch()
 					return a, nil
-				} else if len(a.searchResults) > 0 {
+				} else if a.focus != PanelExplorer && len(a.searchResults) > 0 {
 					a.searchIdx = (a.searchIdx + 1) % len(a.searchResults)
 					a.jumpToSearchResult()
 					return a, nil
@@ -489,10 +497,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "N":
 			if a.mode == ModeNormal {
-				if a.searchExplorer && a.explorer.FilteredCount() > 0 {
+				if a.focus == PanelExplorer && a.explorer.FilteredCount() > 0 {
 					a.explorer.PrevMatch()
 					return a, nil
-				} else if len(a.searchResults) > 0 {
+				} else if a.focus != PanelExplorer && len(a.searchResults) > 0 {
 					a.searchIdx--
 					if a.searchIdx < 0 {
 						a.searchIdx = len(a.searchResults) - 1
@@ -654,23 +662,22 @@ func (a App) updateSearch(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // runSearch executes the search query and updates results.
 func (a *App) runSearch() {
+	// Each panel owns its search state; only the searched panel is touched.
 	if len(a.searchBuf) == 0 {
-		a.searchResults = nil
-		a.searchIdx = 0
-		a.matchedIDs = nil
-		a.explorer.ClearFilter()
+		if a.searchExplorer {
+			a.explorer.ClearFilter()
+		} else {
+			a.searchResults = nil
+			a.searchIdx = 0
+			a.matchedIDs = nil
+		}
 		return
 	}
 	query := string(a.searchBuf)
 	if a.searchExplorer {
-		// Search files in explorer
 		a.explorer.Filter(query)
-		a.searchResults = nil
-		a.matchedIDs = nil
 	} else {
-		// Search nodes in tree
-		filters := search.ParseQuery(query)
-		a.searchResults = search.QueryNodes(a.proj, filters)
+		a.searchResults = search.QueryExpr(a.proj, search.ParseExpr(query))
 		a.searchIdx = 0
 		a.matchedIDs = make(map[string]bool, len(a.searchResults))
 		for _, r := range a.searchResults {
@@ -772,7 +779,7 @@ func (a App) updateCommand(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // knownCommands lists all available command names for tab completion.
-var knownCommands = []string{"w", "q", "q!", "wq", "export", "theme", "open", "e", "notifications", "notify", "validate", "log-level", "problems", "diagnostics", "registry"}
+var knownCommands = []string{"w", "q", "q!", "wq", "export", "theme", "open", "e", "notifications", "notify", "validate", "log-level", "problems", "diagnostics", "registry", "help", "options"}
 
 // knownRegistrySubcommands lists ":registry <sub>" subcommands for tab completion.
 var knownRegistrySubcommands = []string{"check", "report"}
@@ -784,30 +791,86 @@ var knownRegistrySubcommands = []string{"check", "report"}
 // longest-common-prefix completion logic (see completeWord) throughout.
 func (a *App) completeCommand() {
 	input := string(a.cmdBuf)
+	if candidates, ok := a.completionCandidates(input); ok {
+		a.completeWord(input, candidates)
+	}
+}
+
+// completionCandidates returns the values the last word of input can complete to.
+func (a App) completionCandidates(input string) ([]string, bool) {
 	fields := strings.Fields(input)
 	endsWithSpace := strings.HasSuffix(input, " ")
 
-	if len(fields) == 0 {
-		return
-	}
-
 	// First word, not yet followed by a space: completing the command name.
-	if len(fields) == 1 && !endsWithSpace {
-		a.completeWord(input, knownCommands)
-		return
+	if len(fields) == 0 || (len(fields) == 1 && !endsWithSpace) {
+		return knownCommands, true
 	}
 
-	if fields[0] != "registry" {
-		return
+	// Completing the first argument (or the one after the command word).
+	argIdx := len(fields) - 1
+	if endsWithSpace {
+		argIdx = len(fields)
 	}
-	switch {
-	case (len(fields) == 1 && endsWithSpace) || (len(fields) == 2 && !endsWithSpace):
-		// ":registry " or ":registry <partial>" — complete the subcommand.
-		a.completeWord(input, knownRegistrySubcommands)
-	case fields[1] == "check" && ((len(fields) == 2 && endsWithSpace) || (len(fields) == 3 && !endsWithSpace)):
-		// ":registry check " or ":registry check <partial>" — complete a subject name.
-		a.completeWord(input, a.explorer.RegistrySubjects())
+	switch fields[0] {
+	case "theme":
+		if argIdx == 1 {
+			return a.themeReg.Names(), true
+		}
+	case "open", "e", "export":
+		if argIdx == 1 || (fields[0] == "export" && argIdx == 2) {
+			partial := ""
+			if !endsWithSpace {
+				partial = fields[len(fields)-1]
+			}
+			return completePaths(partial), true
+		}
+	case "registry":
+		switch {
+		case argIdx == 1:
+			return knownRegistrySubcommands, true
+		case fields[1] == "check" && argIdx == 2:
+			return a.explorer.RegistrySubjects(), true
+		}
 	}
+	return nil, false
+}
+
+// completePaths lists directories and .avsc files matching a path prefix.
+func completePaths(partial string) []string {
+	matches, _ := filepath.Glob(partial + "*")
+	var out []string
+	for _, m := range matches {
+		info, err := os.Stat(m)
+		if err != nil {
+			continue
+		}
+		if info.IsDir() {
+			out = append(out, m+string(filepath.Separator))
+		} else if strings.HasSuffix(m, ".avsc") {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// matchCandidates returns prefix matches, falling back to fuzzy matches when
+// no candidate starts with partial.
+func matchCandidates(candidates []string, partial string) []string {
+	var matches []string
+	for _, c := range candidates {
+		if strings.HasPrefix(c, partial) {
+			matches = append(matches, c)
+		}
+	}
+	if len(matches) == 0 && partial != "" {
+		for _, c := range candidates {
+			if search.Fuzzy(c, partial) {
+				matches = append(matches, c)
+			}
+		}
+	}
+	sort.Strings(matches)
+	return matches
 }
 
 // completeWord completes the final whitespace-delimited word of input
@@ -835,16 +898,10 @@ func (a *App) completeWord(input string, candidates []string) {
 		prefix = input[:idx+1]
 		partial = input[idx+1:]
 	}
-	var matches []string
-	for _, c := range candidates {
-		if strings.HasPrefix(c, partial) {
-			matches = append(matches, c)
-		}
-	}
+	matches := matchCandidates(candidates, partial)
 	if len(matches) == 0 {
 		return
 	}
-	sort.Strings(matches)
 	if len(matches) == 1 {
 		a.cmdBuf = []rune(prefix + matches[0])
 		a.cmdCursor = len(a.cmdBuf)
@@ -944,6 +1001,12 @@ func (a App) executeCommand(raw string) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a.openFile(args[0])
+	case "help":
+		a.overlay = OverlayHelp
+		a.helpScroll = 0
+		return a, nil
+	case "options":
+		return a.openContextMenu(a.focus), nil
 	case "notifications", "notify":
 		a.overlay = OverlayNotify
 		a.notifyScrl = 0
@@ -1026,12 +1089,18 @@ func (a App) doSaveAs(path string) (tea.Model, tea.Cmd) {
 
 // applyTheme switches the active theme across all UI components and persists the choice.
 func (a *App) applyTheme(t *theme.Theme) {
+	a.setThemeVisual(t)
+	config.SetTheme(t.Name)
+}
+
+// setThemeVisual switches the active theme without persisting the choice.
+func (a *App) setThemeVisual(t *theme.Theme) {
 	a.theme = t
 	a.tree.theme = t
 	a.details.theme = t
 	a.explorer.theme = t
 	a.statusbar.theme = t
-	config.SetTheme(t.Name)
+	a.picker.theme = t
 }
 
 // updateTree handles all keys when the tree panel is focused.
@@ -1329,7 +1398,22 @@ func (a App) commitDetailEdit() (tea.Model, tea.Cmd) {
 func (a App) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch a.overlay {
 	case OverlayPicker:
+		previewing := a.overlayAction == ActionSelectTheme
+		if previewing && a.themeBeforePreview == nil {
+			a.themeBeforePreview = a.theme
+		}
 		sel, done := a.picker.HandleKey(msg)
+		if previewing {
+			orig := a.themeBeforePreview
+			if done {
+				a.themeBeforePreview = nil
+				if sel == "" {
+					a.setThemeVisual(orig)
+				}
+			} else if t := a.themeReg.Get(a.picker.Selected()); t != nil {
+				a.setThemeVisual(t)
+			}
+		}
 		if done {
 			a.overlay = OverlayNone
 			if sel != "" {
@@ -1350,7 +1434,9 @@ func (a App) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			a.overlay = OverlayNone
 			a.helpScroll = 0
 		case "j", "down":
-			a.helpScroll++
+			if a.helpScroll < a.helpMaxScroll() {
+				a.helpScroll++
+			}
 		case "k", "up":
 			if a.helpScroll > 0 {
 				a.helpScroll--
@@ -1765,6 +1851,8 @@ func (a App) actionReplaceType() (tea.Model, tea.Cmd) {
 // handlePickerResult processes the selection from the picker overlay.
 func (a App) handlePickerResult(sel string) (tea.Model, tea.Cmd) {
 	switch a.overlayAction {
+	case ActionContextMenu:
+		return a.runContextMenuItem(sel)
 	case ActionAddField:
 		node := a.tree.SelectedNode()
 		if node == nil {
@@ -2240,6 +2328,7 @@ func (a App) View() tea.View {
 
 	v := tea.NewView(full)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
@@ -2348,6 +2437,37 @@ func (a App) renderPanel(content string, panel FocusPanel) string {
 	return topBorder + "\n" + body.String() + "\n" + bottomBorder
 }
 
+const helpMargin = 4
+
+// helpBoxWidth is the outer width of the help box: window width minus a margin.
+func (a App) helpBoxWidth() int {
+	w := a.width - 2*helpMargin
+	if w < 30 {
+		w = 30
+	}
+	return w
+}
+
+// helpLayout returns the wrapped help lines, the number of visible lines and
+// the inner text width (box width minus border and padding).
+func (a App) helpLayout() ([]string, int, int) {
+	innerW := a.helpBoxWidth() - 6
+	maxLines := a.height - 10
+	if maxLines < 5 {
+		maxLines = 5
+	}
+	return strings.Split(HelpView(a.theme, innerW), "\n"), maxLines, innerW
+}
+
+// helpMaxScroll is the largest scroll offset that still fills the box.
+func (a App) helpMaxScroll() int {
+	lines, maxLines, _ := a.helpLayout()
+	if n := len(lines) - maxLines; n > 0 {
+		return n
+	}
+	return 0
+}
+
 // renderOverlay renders the active overlay centered on the content area.
 func (a App) renderOverlay() string {
 	var overlayContent string
@@ -2357,18 +2477,8 @@ func (a App) renderOverlay() string {
 	case OverlayConfirm:
 		overlayContent = a.confirm.View()
 	case OverlayHelp:
-		helpText := HelpView(a.theme)
-		helpLines := strings.Split(helpText, "\n")
-		// Limit visible height to terminal - 6 (border + padding)
-		maxLines := a.height - 8
-		if maxLines < 5 {
-			maxLines = 5
-		}
-		// Clamp scroll
-		maxScroll := len(helpLines) - maxLines
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
+		helpLines, maxLines, _ := a.helpLayout()
+		maxScroll := a.helpMaxScroll()
 		if a.helpScroll > maxScroll {
 			a.helpScroll = maxScroll
 		}
@@ -2376,8 +2486,11 @@ func (a App) renderOverlay() string {
 		if end > len(helpLines) {
 			end = len(helpLines)
 		}
-		visible := helpLines[a.helpScroll:end]
-		// Add scroll indicator
+		visible := append([]string{}, helpLines[a.helpScroll:end]...)
+		// Pad so the box keeps a constant size regardless of the text shown
+		for len(visible) < maxLines {
+			visible = append(visible, "")
+		}
 		dimStyle := lipgloss.NewStyle().Foreground(a.theme.Muted).Italic(true)
 		hint := "  esc/? close  j/k scroll"
 		if a.helpScroll > 0 {
@@ -2446,11 +2559,14 @@ func (a App) renderOverlay() string {
 		overlayContent = a.renderRegistryReportOverlay()
 	}
 
-	overlayBox := lipgloss.NewStyle().
+	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(a.theme.Primary).
-		Padding(1, 2).
-		Render(overlayContent)
+		Padding(1, 2)
+	if a.overlay == OverlayHelp {
+		box = box.Width(a.helpBoxWidth())
+	}
+	overlayBox := box.Render(overlayContent)
 
 	contentH := a.height - 1
 	if contentH < 1 {
@@ -2493,6 +2609,9 @@ func (a App) renderCommandBar() string {
 	bar := prompt + input
 	if a.cmdCompletionActive && len(a.cmdCompletions) > 0 {
 		bar += "  " + a.renderCompletionSuggestions()
+	} else if live := a.liveSuggestions(); len(live) > 0 {
+		dim := lipgloss.NewStyle().Foreground(a.theme.Dim)
+		bar += "  " + dim.Render("["+strings.Join(live, " ")+"]")
 	}
 	// Guard against the suggestion list (or a long command buffer) making
 	// the bar wider than the terminal — StatusBar.Width only pads, it does
@@ -2501,6 +2620,29 @@ func (a App) renderCommandBar() string {
 		bar = ansi.Truncate(bar, a.width, "…")
 	}
 	return a.theme.StatusBar.Width(a.width).Render(bar)
+}
+
+// liveSuggestions lists candidates matching the word being typed, shown as the
+// user types (including right after Ctrl+P, when every command is listed).
+func (a App) liveSuggestions() []string {
+	input := string(a.cmdBuf)
+	candidates, ok := a.completionCandidates(input)
+	if !ok {
+		return nil
+	}
+	partial := ""
+	if !strings.HasSuffix(input, " ") {
+		if idx := strings.LastIndex(input, " "); idx >= 0 {
+			partial = input[idx+1:]
+		} else {
+			partial = input
+		}
+	}
+	matches := matchCandidates(candidates, partial)
+	if len(matches) == 1 && matches[0] == partial {
+		return nil
+	}
+	return matches
 }
 
 // renderCompletionSuggestions renders the current tab-completion candidate
